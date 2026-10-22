@@ -1,0 +1,16 @@
+﻿node_modules/
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+.env
+.env.*
+/dist
+/build
+/.vite
+/.parcel-cache
+uploads/
+uploads/**
+.vscode/
+*.code-workspace
+.DS_Store
+Thumbs.db
