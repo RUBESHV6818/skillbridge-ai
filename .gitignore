@@ -5,12 +5,13 @@ pnpm-debug.log
 .env
 .env.*
 !.env.example
-/dist
+**/dist/
 /build
 /.vite
 /.parcel-cache
 uploads/
 uploads/**
+/tmp/
 .vscode/
 *.code-workspace
 .DS_Store

@@ -24,33 +24,71 @@ import {
   FileSearch,
   ExternalLink,
 } from 'lucide-react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../../components/common/PageHeader';
 import { ScoreRing } from '../../components/common/ScoreRing';
 import { SkillChip } from '../../components/common/SkillChip';
 import { colors } from '../../theme/theme';
 import resumeService from '../../services/resumeService';
+import mentorService from '../../services/mentorService';
 
 export const ResumeIntelligencePage = () => {
+  const [searchParams] = useSearchParams();
+  const requestedResumeId = searchParams.get('resumeId');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [suggestions, setSuggestions] = useState([]);
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'critical' | 'recommended' | 'optional'
   const [toast, setToast] = useState(null);
+  const [loadError, setLoadError] = useState('');
+  const [mentorRequests, setMentorRequests] = useState({});
+  const [requestingReview, setRequestingReview] = useState('');
 
   useEffect(() => {
     let isMounted = true;
-    resumeService.getIntelligence().then((res) => {
+    resumeService.getIntelligence(requestedResumeId).then((res) => {
       if (isMounted) {
         setData(res.data);
-        setSuggestions(res.data.rewriteSuggestions);
+        setSuggestions(res.data?.rewriteSuggestions || []);
+        setLoading(false);
+      }
+    }).catch((error) => {
+      if (isMounted) {
+        setLoadError(error.response?.data?.message || 'Could not load the resume review. Upload a readable PDF or DOCX and try again.');
         setLoading(false);
       }
     });
     return () => {
       isMounted = false;
     };
+  }, [requestedResumeId]);
+
+  useEffect(() => {
+    mentorService.getMyReviews().then(({ data: reviews }) => {
+      const statuses = {};
+      reviews.forEach((review) => { if (review.sourceSuggestionId && !statuses[review.sourceSuggestionId]) statuses[review.sourceSuggestionId] = review; });
+      setMentorRequests(statuses);
+    }).catch(() => {});
   }, []);
+
+  const requestMentorReview = async (item) => {
+    setRequestingReview(item.id);
+    try {
+      const { data: request } = await mentorService.requestReview({
+        sourceSuggestionId: item.id,
+        resumeId: data?.resumeId,
+        title: item.section,
+        section: item.section,
+        before: item.before || 'No matching line was identified in the uploaded resume.',
+        suggestion: item.after,
+        rationale: item.rationale,
+      });
+      setMentorRequests((current) => ({ ...current, [item.id]: request }));
+      setToast({ type: 'success', text: 'Your mentor feedback request was submitted.' });
+    } catch (error) {
+      setToast({ type: 'error', text: error.response?.data?.message || 'Could not submit the mentor feedback request.' });
+    } finally { setRequestingReview(''); }
+  };
 
   const handleSuggestionAction = (suggestionId, action) => {
     setSuggestions((prev) =>
@@ -128,18 +166,27 @@ export const ResumeIntelligencePage = () => {
   if (loading) {
     return (
       <Box>
-        <PageHeader title="AI Resume Intelligence" subtitle="Analyzing ATS readability and extracting skill vectors..." />
+        <PageHeader title="Resume Review" subtitle="AI is reviewing your complete extracted resume..." />
         <Skeleton variant="rounded" height={220} sx={{ mb: 3, borderRadius: 2 }} />
         <Skeleton variant="rounded" height={340} sx={{ borderRadius: 2 }} />
       </Box>
     );
   }
 
+  if (!data) {
+    return <Box>
+      <PageHeader title="Resume Review" subtitle="An evidence-based review of your extracted resume." />
+      <Alert severity="info" action={<Button component={RouterLink} to="/resumes" color="inherit" size="small">Manage resumes</Button>}>
+        {loadError || 'Upload a readable PDF or DOCX to see your review.'}
+      </Alert>
+    </Box>;
+  }
+
   return (
     <Box>
       <PageHeader
-        title="AI Resume Intelligence"
-        subtitle={`Detailed ATS parse of "${data.fileName}". Benchmarked against tier-1 campus recruiter parsers.`}
+        title="Resume Review"
+        subtitle={`${data.analysisProvider !== 'Text analysis fallback' ? `${data.analysisProvider} reviewed` : 'Text review of'} "${data.fileName}" for ${data.targetRole || 'general resume quality'}. This is guidance, not an ATS score or hiring decision.`}
         action={
           <Box sx={{ display: 'flex', gap: 1.5 }}>
             <Button
@@ -174,9 +221,11 @@ export const ResumeIntelligencePage = () => {
         </Alert>
       )}
 
-      {/* Row 1: Overall ATS Score & 4 Pillar Breakdowns */}
+      {data.analysisSummary && <Alert severity="info" sx={{ mb: 3 }}>{data.analysisSummary} {data.analysisProvider !== 'Text analysis fallback' && `Analysis by ${data.analysisProvider} (${data.analysisModel}).`}</Alert>}
+
+      {/* Resume quality estimate and its component signals */}
       <Grid container spacing={3} sx={{ mb: 3.5 }}>
-        {/* Main ATS Ring */}
+        {/* Overall text signal */}
         <Grid item xs={12} md={4}>
           <Card
             sx={{
@@ -190,7 +239,7 @@ export const ResumeIntelligencePage = () => {
           >
             <Box>
               <Typography variant="caption" sx={{ fontWeight: 600, color: colors.inkSecondary, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                ATS Compliance Score
+                {data.analysisProvider !== 'Text analysis fallback' ? 'AI Resume Review' : 'Resume Content Signal'}
               </Typography>
               <Box sx={{ my: 2, display: 'flex', justifyContent: 'center' }}>
                 <ScoreRing
@@ -198,21 +247,21 @@ export const ResumeIntelligencePage = () => {
                   max={100}
                   size={140}
                   strokeWidth={10}
-                  label="ATS Match"
-                  tooltip="Calculated across syntax, heading structure, and keyword overlap against 40+ engineering JDs."
+                  label={data.analysisProvider !== 'Text analysis fallback' ? 'AI review' : 'Text review'}
+                  tooltip={data.analysisProvider !== 'Text analysis fallback' ? `${data.analysisProvider} estimate based on resume evidence. It is not an ATS score or hiring decision.` : 'Text-based fallback estimate. It is not an ATS score.'}
                 />
               </Box>
               <Typography variant="body2" sx={{ textAlign: 'center', color: colors.inkSecondary, fontSize: '0.8125rem', px: 1 }}>
-                Beats <strong>{data.percentile}%</strong> of campus resumes parsed this placement cycle.
+                {data.analysisProvider !== 'Text analysis fallback' ? `An AI estimate from ${data.analysisProvider}, based on the complete extracted resume text.` : 'A rule-based estimate from the extracted resume text.'}
               </Typography>
             </Box>
 
             <Box sx={{ pt: 2, mt: 2, borderTop: `1px solid ${colors.borderLight}` }}>
               <Typography variant="caption" sx={{ color: colors.inkSecondary, display: 'block', mb: 0.5 }}>
-                Primary Observation:
+                Review scope:
               </Typography>
               <Typography variant="caption" sx={{ color: colors.ink, fontWeight: 500, lineHeight: 1.5, display: 'block' }}>
-                Your resume mentions React and Node.js, but lacks automated testing (Jest) and CI/CD tools. Most campus JDs above ₹6 LPA penalize missing unit test proof.
+                {data.analysisProvider !== 'Text analysis fallback' ? `Target role: ${data.targetRole || 'Not selected'}. Resume mentions are evidence to inspect, not proof of proficiency.` : `The review found ${data.matchedKeywordsCount ?? 0} terms from a built-in vocabulary; this fallback is not role-specific.`}
               </Typography>
             </Box>
           </Card>
@@ -346,6 +395,18 @@ export const ResumeIntelligencePage = () => {
               </Box>
             </Box>
           </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Box sx={{ p: 2, borderRadius: 1.5, backgroundColor: colors.surfaceSubtle, border: `1px solid ${colors.borderLight}`, height: '100%' }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, color: colors.inkSecondary, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block', mb: 1.25 }}>
+                Mechanical Engineering
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                {(data.extractedSkills.engineering || []).map((sk) => (
+                  <SkillChip key={sk} name={sk} status="matched" />
+                ))}
+              </Box>
+            </Box>
+          </Grid>
         </Grid>
       </Card>
 
@@ -469,7 +530,7 @@ export const ResumeIntelligencePage = () => {
                     }}
                   >
                     <Typography variant="caption" sx={{ color: colors.success, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block', mb: 0.75 }}>
-                      Suggested ATS Rewrite (Action + Metrics)
+                      Suggested Edit (verify all claims)
                     </Typography>
                     <Typography variant="body2" sx={{ color: colors.ink, fontWeight: 600, fontSize: '0.84375rem', lineHeight: 1.55 }}>
                       "{item.after}"
@@ -485,6 +546,16 @@ export const ResumeIntelligencePage = () => {
                 </Typography>
 
                 <Box sx={{ display: 'flex', gap: 1, alignSelf: { xs: 'flex-end', sm: 'center' } }}>
+                  {mentorRequests[item.id] ? (
+                    <Box sx={{ textAlign: { xs: 'right', sm: 'left' } }}>
+                      <Chip size="small" label={mentorRequests[item.id].status === 'pending' ? 'Mentor review pending' : mentorRequests[item.id].status === 'approved' ? 'Mentor approved' : 'Changes requested'} color={mentorRequests[item.id].status === 'approved' ? 'success' : 'default'} />
+                      {mentorRequests[item.id].feedbackComment && <Typography variant="caption" sx={{ display: 'block', mt: 0.5, maxWidth: 260, color: colors.inkSecondary }}>{mentorRequests[item.id].feedbackComment}</Typography>}
+                    </Box>
+                  ) : (
+                    <Button variant="outlined" size="small" disabled={requestingReview === item.id} onClick={() => requestMentorReview(item)} sx={{ fontSize: '0.75rem', py: 0.4 }}>
+                      {requestingReview === item.id ? 'Sending…' : 'Ask mentor to review'}
+                    </Button>
+                  )}
                   {item.status === 'pending' ? (
                     <>
                       <Button

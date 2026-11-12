@@ -97,15 +97,21 @@ export const interviewService = {
         300
       );
     }
-    return api.post('/interview/start', config);
+    return api.post('/interview/start', config, { timeout: 90000 });
   },
+
+  getAdaptiveFollowUp: async (sessionId, details) =>
+    api.post(`/interview/${sessionId}/follow-up`, details, { timeout: 90000 }),
 
   submitAnswers: async (sessionId, answers) => {
     if (USE_MOCK) {
       return mockDelay(MOCK_INTERVIEW_EVALUATION, 650);
     }
-    return api.post(`/interview/${sessionId}/submit`, { answers });
+    return api.post(`/interview/${sessionId}/submit`, { answers }, { timeout: 90000 });
   },
+
+  runCode: async (sessionId, { questionId, code }) =>
+    api.post(`/interview/${sessionId}/run-code`, { questionId, code }, { timeout: 90000 }),
 
   getLatestResults: async () => {
     if (USE_MOCK) {

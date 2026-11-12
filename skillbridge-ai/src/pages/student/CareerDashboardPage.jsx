@@ -15,6 +15,7 @@ import {
   TableRow,
   Link,
   Tooltip,
+  Alert,
 } from '@mui/material';
 import {
   ArrowRight,
@@ -50,12 +51,18 @@ import dashboardService from '../../services/dashboardService';
 export const CareerDashboardPage = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
     dashboardService.getSummary().then((res) => {
       if (isMounted) {
         setData(res.data);
+        setLoading(false);
+      }
+    }).catch((error) => {
+      if (isMounted) {
+        setLoadError(error.response?.data?.message || 'Could not load your dashboard. Please refresh and try again.');
         setLoading(false);
       }
     });
@@ -92,6 +99,7 @@ export const CareerDashboardPage = () => {
             }}
           />
         );
+      case 'oa':
       case 'assessment':
         return (
           <Chip
@@ -105,6 +113,8 @@ export const CareerDashboardPage = () => {
             }}
           />
         );
+      case 'rejected':
+        return <Chip label="Archived" size="small" sx={{ backgroundColor: colors.surfaceSubtle, color: colors.inkSecondary, border: `1px solid ${colors.border}` }} />;
       default:
         return (
           <Chip
@@ -139,11 +149,15 @@ export const CareerDashboardPage = () => {
     );
   }
 
+  if (loadError) {
+    return <Box><PageHeader title="Career Readiness Dashboard" subtitle="Your saved placement activity and practice signals." /><Alert severity="error">{loadError}</Alert></Box>;
+  }
+
   return (
     <Box>
       <PageHeader
         title="Career Readiness Dashboard"
-        subtitle="Holistic diagnosis of your ATS resume benchmark, mock interview rigor, and active campus drives."
+        subtitle="A snapshot of your saved resume, interview practice, and application tracker."
         action={
           <Button
             component={RouterLink}
@@ -177,7 +191,7 @@ export const CareerDashboardPage = () => {
                   Overall Readiness
                 </Typography>
                 <Chip
-                  label="Placement Ready"
+                  label={data.healthScore === null ? 'Add activity' : data.healthScore >= 75 ? 'Strong signals' : 'In progress'}
                   size="small"
                   sx={{
                     backgroundColor: colors.successBg,
@@ -190,18 +204,18 @@ export const CareerDashboardPage = () => {
               </Box>
 
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', my: 2 }}>
-                <ScoreRing
+                {data.healthScore === null ? <Typography variant="h3" sx={{ color: colors.inkSecondary }}>No score yet</Typography> : <ScoreRing
                   score={data.healthScore}
                   max={100}
                   size={135}
                   strokeWidth={10}
                   label="Health Score"
-                  tooltip="Weighted formula: 40% ATS Resume Score + 35% AI Mock Interview Score + 25% Target Skill Alignment"
-                />
+                  tooltip="Weighted average of the saved AI resume review, role-fit analysis, and latest completed mock interview. Missing scores are excluded. This is an estimate, not a placement prediction."
+                />}
               </Box>
 
               <Typography variant="body2" sx={{ textAlign: 'center', color: colors.inkSecondary, fontSize: '0.8125rem', px: 1, mt: 1 }}>
-                Calculated across <strong>14 campus fullstack JDs</strong>. Top 21% of CIT 2025 cohort.
+                Current estimate from your saved data; it is not a peer ranking or placement prediction.
               </Typography>
             </Box>
 
@@ -209,26 +223,26 @@ export const CareerDashboardPage = () => {
             <Box sx={{ pt: 2, mt: 2, borderTop: `1px solid ${colors.borderLight}` }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
                 <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                  Resume Quality (40%)
+                  AI Resume Review ({data.healthBreakdown.resumeWeight ?? 40}%)
                 </Typography>
                 <Typography variant="caption" sx={{ fontWeight: 600, color: colors.ink, fontVariantNumeric: 'tabular-nums' }}>
-                  {data.healthBreakdown.resumeScore}/100
+                  {data.healthBreakdown.resumeScore ?? '—'}/100
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
                 <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                  Interview Drills (35%)
+                  Interview Drills ({data.healthBreakdown.interviewWeight ?? 35}%)
                 </Typography>
                 <Typography variant="caption" sx={{ fontWeight: 600, color: colors.ink, fontVariantNumeric: 'tabular-nums' }}>
-                  {data.healthBreakdown.interviewScore}/100
+                  {data.healthBreakdown.interviewScore ?? '—'}/100
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                  Target Skill Fit (25%)
+                  AI Role Alignment ({data.healthBreakdown.skillWeight ?? 25}%)
                 </Typography>
                 <Typography variant="caption" sx={{ fontWeight: 600, color: colors.ink, fontVariantNumeric: 'tabular-nums' }}>
-                  {data.healthBreakdown.skillScore}/100
+                  {data.healthBreakdown.skillScore ?? '—'}/100
                 </Typography>
               </Box>
             </Box>
@@ -240,13 +254,11 @@ export const CareerDashboardPage = () => {
           <Grid container spacing={2} sx={{ height: '100%' }}>
             <Grid item xs={12} sm={6}>
               <StatCard
-                title="Primary ATS Score"
-                value={data.healthBreakdown.resumeScore}
+                title="AI Resume Review"
+                value={data.healthBreakdown.resumeScore ?? '—'}
                 unit="/ 100"
-                tooltip="Based on Aarthi_Raman_FullStack_2025.pdf against standard ATS parsers"
-                trend={4}
-                trendLabel="vs last revision"
-                subtitle="Primary: FullStack_2025.pdf"
+                tooltip="Saved AI review of the extracted resume text. This is guidance, not an ATS score or hiring prediction."
+                subtitle={data.primaryResumeName ? `Primary: ${data.primaryResumeName}` : 'Upload a resume to see text signals'}
                 icon={FileText}
                 action={
                   <Button
@@ -264,12 +276,10 @@ export const CareerDashboardPage = () => {
             <Grid item xs={12} sm={6}>
               <StatCard
                 title="Mock Interview Score"
-                value={data.healthBreakdown.interviewScore}
+                value={data.healthBreakdown.interviewScore ?? '—'}
                 unit="/ 100"
-                tooltip="Average score across 4 simulated technical & behavioral sessions"
-                trend={8}
-                trendLabel="vs initial baseline"
-                subtitle="Last evaluated: 2 days ago"
+                tooltip="Score from your latest completed written interview practice session."
+                subtitle={data.latestInterviewAt ? `Completed: ${new Date(data.latestInterviewAt).toLocaleDateString()}` : 'No completed practice session'}
                 icon={Headphones}
                 action={
                   <Button
@@ -290,7 +300,7 @@ export const CareerDashboardPage = () => {
                 value={data.stats.appliedJobs}
                 unit="applied"
                 tooltip="Total companies applied to on-campus and direct off-campus"
-                subtitle={`${data.stats.shortlists} shortlists • ${data.stats.interviewsScheduled} interviews scheduled`}
+                subtitle={`${data.stats.assessments} assessments • ${data.stats.interviewsScheduled} interviews`}
                 icon={Briefcase}
                 action={
                   <Button
@@ -307,26 +317,14 @@ export const CareerDashboardPage = () => {
 
             <Grid item xs={12} sm={6}>
               <StatCard
-                title="Active Offers"
+                title="Offers Tracked"
                 value={data.stats.offersCount}
                 unit="offer"
                 tooltip="Formal offer letters received through campus placement cell"
-                subtitle="Zoho Corp (MTS) • ₹5.6 LPA CTC"
+                subtitle="From your placement tracker"
                 variant="highlight"
                 icon={CheckCircle2}
-                action={
-                  <Chip
-                    label="Offer Accepted"
-                    size="small"
-                    sx={{
-                      backgroundColor: colors.accent,
-                      color: '#FFFFFF',
-                      fontSize: '0.6875rem',
-                      fontWeight: 600,
-                      height: 20,
-                    }}
-                  />
-                }
+                action={<Button component={RouterLink} to="/placement-tracker" size="small">View tracker</Button>}
               />
             </Grid>
           </Grid>
@@ -338,10 +336,10 @@ export const CareerDashboardPage = () => {
         <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { sm: 'center' }, mb: 2.5, gap: 1 }}>
           <Box>
             <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '1.15rem', color: colors.ink }}>
-              Readiness Trajectory (6-Week Trend)
+              Readiness History
             </Typography>
             <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-              Tracking ATS optimization, interview fluency, and overall placement preparedness.
+              Weekly trend from your saved scores for {data.targetRole || 'your current profile'}; opening the dashboard saves today’s snapshot.
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -351,7 +349,7 @@ export const CareerDashboardPage = () => {
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }}>
               <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: colors.success }} />
-              <Typography variant="caption" sx={{ color: colors.inkSecondary }}>ATS Resume</Typography>
+              <Typography variant="caption" sx={{ color: colors.inkSecondary }}>AI Resume Review</Typography>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }}>
               <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: colors.warning }} />
@@ -361,7 +359,7 @@ export const CareerDashboardPage = () => {
         </Box>
 
         <Box sx={{ width: '100%', height: 260 }}>
-          <ResponsiveContainer width="100%" height="100%">
+          {data.progressTimeline?.length ? <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={data.progressTimeline}
               margin={{ top: 10, right: 15, left: -20, bottom: 0 }}
@@ -374,7 +372,7 @@ export const CareerDashboardPage = () => {
                 tickLine={false}
               />
               <YAxis
-                domain={[30, 90]}
+                domain={[0, 100]}
                 stroke={colors.inkTertiary}
                 fontSize={12}
                 tickLine={false}
@@ -400,7 +398,7 @@ export const CareerDashboardPage = () => {
               <Line
                 type="monotone"
                 dataKey="resume"
-                name="ATS Resume"
+                name="AI Resume Review"
                 stroke={colors.success}
                 strokeWidth={1.8}
                 dot={{ r: 3, fill: colors.success }}
@@ -414,7 +412,9 @@ export const CareerDashboardPage = () => {
                 dot={{ r: 3, fill: colors.warning }}
               />
             </LineChart>
-          </ResponsiveContainer>
+          </ResponsiveContainer> : <Box sx={{ height: '100%', display: 'grid', placeItems: 'center', color: colors.inkSecondary }}>
+            <Typography variant="body2">Your first readiness snapshot will appear here once a saved AI score is available.</Typography>
+          </Box>}
         </Box>
       </Card>
 
@@ -429,14 +429,14 @@ export const CareerDashboardPage = () => {
                   What to do next
                 </Typography>
                 <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                  3 highest-impact actions prioritized by your gap analysis
+                  Suggested from the information saved to your account
                 </Typography>
               </Box>
               <Sparkles size={18} color={colors.accent} />
             </Box>
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-              {data.nextActions.map((act, idx) => (
+              {(data?.nextActions || data?.recommendedActions || []).map((act, idx) => (
                 <Box
                   key={act.id}
                   sx={{
@@ -537,7 +537,7 @@ export const CareerDashboardPage = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {data.recentApplications.map((app) => (
+                  {(data?.recentApplications || []).map((app) => (
                     <TableRow key={app.id} hover>
                       <TableCell sx={{ py: 1.5 }}>
                         <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.84375rem', color: colors.ink }}>
@@ -558,20 +558,21 @@ export const CareerDashboardPage = () => {
                       </TableCell>
                     </TableRow>
                   ))}
+                  {!data?.recentApplications?.length && <TableRow><TableCell colSpan={4} align="center" sx={{ py: 4, color: colors.inkSecondary }}>No applications saved yet. Add one in Placement Tracker to see it here.</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </TableContainer>
 
             <Box sx={{ mt: 2.5, p: 1.5, borderRadius: 1.5, backgroundColor: colors.surfaceSubtle, border: `1px solid ${colors.borderLight}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                Next upcoming: <strong>Freshworks Technical Round 2</strong> tomorrow at 2:30 PM
+                Application stages shown here come from your placement tracker.
               </Typography>
               <Link
                 component={RouterLink}
                 to="/mock-interview"
                 sx={{ fontSize: '0.75rem', fontWeight: 600, color: colors.accent, textDecoration: 'none' }}
               >
-                Practice freshworks drill →
+                Practice interview →
               </Link>
             </Box>
           </Card>

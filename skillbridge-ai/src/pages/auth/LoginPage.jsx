@@ -17,10 +17,10 @@ import { Eye, EyeOff, GraduationCap, ArrowRight, CheckCircle2 } from 'lucide-rea
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../theme/theme';
-import { MOCK_USERS } from '../../services/authService';
+import authService, { MOCK_USERS } from '../../services/authService';
 
 export const LoginPage = () => {
-  const { login } = useAuth();
+  const { login, demoLogin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -33,6 +33,9 @@ export const LoginPage = () => {
   const [touched, setTouched] = useState({ email: false, password: false });
   const [formError, setFormError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resendingVerification, setResendingVerification] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState('');
+  const needsEmailVerification = /verify your email/i.test(formError);
 
   const emailError = touched.email && (!email || !/\S+@\S+\.\S+/.test(email));
   const passwordError = touched.password && (!password || password.length < 6);
@@ -69,15 +72,34 @@ export const LoginPage = () => {
     setPassword('PlacementReady#2025');
     setLoading(true);
     try {
-      await login(persona.email, 'PlacementReady#2025');
+      await demoLogin(roleKey);
       const targetPath =
         persona.role === 'coordinator' ? '/coordinator/cohort' :
         persona.role === 'mentor' ? '/mentor/students' :
         persona.role === 'admin' ? '/admin/users' :
         '/dashboard';
       navigate(targetPath, { replace: true });
+    } catch (err) {
+      setFormError(err.response?.data?.message || 'Could not sign in to the demo account. Make sure the backend is running.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResendingVerification(true);
+    setVerificationMessage('');
+    try {
+      const response = await authService.resendVerification(email.trim());
+      setVerificationMessage(response.data?.deliveryMode === 'console'
+        ? 'In local development, the verification link is printed in the backend terminal.'
+        : response.data?.deliveryMode === 'unavailable'
+          ? 'Email delivery is not configured. Contact the platform administrator.'
+          : response.data?.message || 'If this account needs verification, a new email has been sent.');
+    } catch (error) {
+      setVerificationMessage(error.response?.data?.message || 'Could not send the verification email. Check the address and try again.');
+    } finally {
+      setResendingVerification(false);
     }
   };
 
@@ -158,8 +180,14 @@ export const LoginPage = () => {
           {formError && (
             <Alert severity="error" sx={{ mb: 2.5, fontSize: '0.8125rem' }}>
               {formError}
+              {needsEmailVerification && (
+                <Button size="small" onClick={handleResendVerification} disabled={resendingVerification || !/\S+@\S+\.\S+/.test(email)} sx={{ display: 'block', mt: 0.5 }}>
+                  {resendingVerification ? 'Sending…' : 'Resend verification email'}
+                </Button>
+              )}
             </Alert>
           )}
+          {verificationMessage && <Alert severity="info" sx={{ mb: 2 }}>{verificationMessage}</Alert>}
 
           <form onSubmit={handleSubmit} noValidate>
             <Box sx={{ mb: 2 }}>

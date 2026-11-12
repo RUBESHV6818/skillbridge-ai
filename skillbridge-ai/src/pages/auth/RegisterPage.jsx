@@ -28,7 +28,7 @@ export const RegisterPage = () => {
     college: 'Chennai Institute of Technology',
     department: 'Computer Science and Engineering',
     batchYear: '2025',
-    targetRole: 'Full Stack Engineer',
+    targetRole: '',
     password: '',
     confirmPassword: '',
   });
@@ -48,6 +48,9 @@ export const RegisterPage = () => {
   ];
 
   const targetRoles = [
+    'Mechanical Engineer',
+    'Machine Learning Engineer',
+    'Data Scientist',
     'Full Stack Engineer',
     'Frontend Specialist (React)',
     'Backend Engineer (Node/Java)',
@@ -98,8 +101,16 @@ export const RegisterPage = () => {
     setFormError('');
 
     try {
-      await register(formData);
-      navigate('/dashboard', { replace: true });
+      const result = await register(formData);
+      if (result.user?.verified === false) {
+        const params = new URLSearchParams({
+          email: result.user.email,
+          delivery: result.emailDelivery?.mode || 'unavailable',
+        });
+        navigate(`/verify?${params.toString()}`, { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     } catch (err) {
       setFormError(err.response?.data?.message || 'Registration failed. Please check your information and try again.');
     } finally {
@@ -175,7 +186,7 @@ export const RegisterPage = () => {
             Create student or staff profile
           </Typography>
           <Typography variant="body2" sx={{ color: colors.inkSecondary }}>
-            Set up your placement profile to unlock AI ATS analysis, skill roadmaps, and campus drive tracking.
+            Set up your placement profile to unlock evidence-based AI resume reviews, skill roadmaps, and campus drive tracking.
           </Typography>
         </Box>
 
@@ -292,6 +303,7 @@ export const RegisterPage = () => {
                   value={formData.targetRole}
                   onChange={handleChange('targetRole')}
                 >
+                  <MenuItem value="">I haven’t chosen a target role yet</MenuItem>
                   {targetRoles.map((roleOption) => (
                     <MenuItem key={roleOption} value={roleOption}>
                       {roleOption}

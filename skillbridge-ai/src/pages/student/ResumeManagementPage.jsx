@@ -45,7 +45,9 @@ export const ResumeManagementPage = () => {
   const fetchResumes = async () => {
     try {
       const res = await resumeService.getResumes();
-      setResumes(res.data);
+      setResumes(Array.isArray(res.data) ? res.data : (res.data?.resumes || []));
+    } catch (e) {
+      setResumes([]);
     } finally {
       setLoading(false);
     }
@@ -61,7 +63,7 @@ export const ResumeManagementPage = () => {
       setResumes((prev) => [newResume.data, ...prev.filter((r) => r.id !== newResume.data.id)]);
       setFeedback({
         type: 'success',
-        text: `"${file.name}" was uploaded successfully and parsed by our ATS diagnostic engine.`,
+        text: `"${file.name}" was uploaded and its text was extracted. Open Resume Intelligence to generate its AI review.`,
       });
     } catch (err) {
       setFeedback({
@@ -137,10 +139,10 @@ export const ResumeManagementPage = () => {
           Upload New Resume
         </Typography>
         <Typography variant="body2" sx={{ color: colors.inkSecondary, mb: 2.5, fontSize: '0.84375rem' }}>
-          Upload your latest resume in PDF or DOCX format. The parser extracts technical skills, projects, and benchmarks readability against campus JDs.
+          Upload your latest resume in PDF or DOCX format. We extract its text, check for common section headings and listed engineering skills, and count text signals. This does not compare against a job description or inspect visual formatting.
         </Typography>
 
-        <FileDropzone onFileUpload={handleUploadSuccess} maxSizeMB={5} accept=".pdf,.docx,.doc" />
+        <FileDropzone onFileUpload={handleUploadSuccess} maxSizeMB={5} accept=".pdf,.docx" />
       </Card>
 
       {/* Resumes List Header */}
@@ -168,7 +170,7 @@ export const ResumeManagementPage = () => {
         <EmptyState
           icon={FileText}
           title="No resumes on file"
-          description="You haven't uploaded any resumes yet. Drop your first PDF above to generate your initial ATS diagnostic report."
+          description="You haven't uploaded any resumes yet. Add a PDF or DOCX to review its readable text."
           actionLabel="Upload First Resume"
           onAction={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
         />
@@ -252,28 +254,33 @@ export const ResumeManagementPage = () => {
                     </Box>
 
                     <Typography variant="caption" sx={{ color: colors.inkSecondary, display: 'block' }}>
-                      {resume.fileSize} • Uploaded {resume.uploadedAt} • Last analysed: {resume.lastAnalysed}
+                      {resume.fileSize} • Uploaded {resume.uploadedAt} • Last AI review: {resume.lastAnalysed || 'Not reviewed yet'}
                     </Typography>
 
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                          ATS Score:
+                          AI Resume Review:
                         </Typography>
                         <Typography
                           variant="caption"
                           sx={{
                             fontWeight: 700,
-                            color: resume.atsScore >= 75 ? colors.success : colors.warning,
+                            color: resume.resumeReviewScore == null ? colors.inkSecondary : resume.resumeReviewScore >= 75 ? colors.success : colors.warning,
                             fontVariantNumeric: 'tabular-nums',
                           }}
                         >
-                          {resume.atsScore}/100
+                          {resume.resumeReviewScore == null ? 'Not analyzed' : `${resume.resumeReviewScore}/100`}
                         </Typography>
                       </Box>
+                      {resume.resumeReviewScore != null && (
+                        <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
+                          {resume.resumeReviewTargetRole ? `Role: ${resume.resumeReviewTargetRole}` : 'General review'}
+                        </Typography>
+                      )}
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                          Matched Keywords:
+                          Detected Terms:
                         </Typography>
                         <Typography variant="caption" sx={{ fontWeight: 600, color: colors.ink, fontVariantNumeric: 'tabular-nums' }}>
                           {resume.matchedKeywordsCount} detected
@@ -298,7 +305,7 @@ export const ResumeManagementPage = () => {
 
                   <Button
                     component={RouterLink}
-                    to="/resume-intelligence"
+                    to={`/resume-intelligence?resumeId=${encodeURIComponent(resume.id)}`}
                     variant="contained"
                     size="small"
                     startIcon={<Sparkles size={14} />}
@@ -333,7 +340,7 @@ export const ResumeManagementPage = () => {
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         title="Delete resume document?"
-        message={`Are you sure you want to delete "${deleteTarget?.fileName}"? All parsed ATS metrics, keyword caches, and rewrite history associated with this file will be discarded.`}
+        message={`Are you sure you want to delete "${deleteTarget?.fileName}"? Its stored file and extracted text will be removed.`}
         confirmLabel="Delete document"
         isDestructive
         loading={deleteLoading}

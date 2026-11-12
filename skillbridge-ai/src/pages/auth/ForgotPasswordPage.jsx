@@ -10,7 +10,6 @@ import {
 } from '@mui/material';
 import { GraduationCap, ArrowLeft, MailCheck } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../theme/theme';
 import authService from '../../services/authService';
 
@@ -20,6 +19,8 @@ export const ForgotPasswordPage = () => {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [deliveryMode, setDeliveryMode] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   const isEmailValid = Boolean(email && /\S+@\S+\.\S+/.test(email));
 
@@ -29,10 +30,14 @@ export const ForgotPasswordPage = () => {
     if (!isEmailValid) return;
 
     setLoading(true);
+    setErrorMessage('');
     try {
       const res = await authService.forgotPassword(email);
       setSuccessMessage(res.data?.message || 'Password reset link sent.');
+      setDeliveryMode(res.data?.deliveryMode || 'smtp');
       setSubmitted(true);
+    } catch (error) {
+      setErrorMessage(error.response?.data?.message || 'Could not request a reset link. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -106,11 +111,12 @@ export const ForgotPasswordPage = () => {
             Reset your password
           </Typography>
           <Typography variant="body2" sx={{ color: colors.inkSecondary }}>
-            Enter your college or registered email address and we will dispatch a secure password reset link.
+            Enter your registered email address. If an account exists, we’ll send a secure reset link.
           </Typography>
         </Box>
 
         <Card sx={{ p: { xs: 2.5, sm: 3.5 }, borderRadius: 2 }}>
+          {errorMessage && <Alert severity="error" sx={{ mb: 2 }}>{errorMessage}</Alert>}
           {submitted ? (
             <Box sx={{ textAlign: 'center', py: 2 }}>
               <Box
@@ -130,7 +136,7 @@ export const ForgotPasswordPage = () => {
                 <MailCheck size={24} />
               </Box>
               <Typography variant="h4" sx={{ fontWeight: 700, mb: 1, fontSize: '1.15rem' }}>
-                Check your inbox
+                {deliveryMode === 'console' ? 'Reset link ready' : deliveryMode === 'unavailable' ? 'Email delivery unavailable' : 'Check your inbox'}
               </Typography>
               <Typography variant="body2" sx={{ color: colors.inkSecondary, mb: 3, lineHeight: 1.6 }}>
                 {successMessage}

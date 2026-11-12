@@ -6,7 +6,7 @@ module.exports.notFound = (req, res, next) => {
 };
 
 module.exports.errorHandler = (err, req, res, next) => {
-  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  const statusCode = err.statusCode || err.status || (res.statusCode === 200 ? 500 : res.statusCode);
   res.status(statusCode);
   res.json({
     message: err.message,

@@ -8,7 +8,7 @@ export const MOCK_STUDENTS = [
     department: 'CSE',
     cgpa: 8.42,
     readinessScore: 74,
-    atsScore: 72,
+    resumeReviewScore: 72,
     interviewScore: 68,
     status: 'offer',
     statusLabel: 'Offer (Zoho)',
@@ -23,7 +23,7 @@ export const MOCK_STUDENTS = [
     department: 'CSE',
     cgpa: 8.15,
     readinessScore: 68,
-    atsScore: 66,
+    resumeReviewScore: 66,
     interviewScore: 70,
     status: 'interviewing',
     statusLabel: 'Interviewing (TCS Digital)',
@@ -38,7 +38,7 @@ export const MOCK_STUDENTS = [
     department: 'IT',
     cgpa: 8.78,
     readinessScore: 81,
-    atsScore: 82,
+    resumeReviewScore: 82,
     interviewScore: 79,
     status: 'offer',
     statusLabel: 'Offer (TCS Digital)',
@@ -53,7 +53,7 @@ export const MOCK_STUDENTS = [
     department: 'ECE',
     cgpa: 7.62,
     readinessScore: 59,
-    atsScore: 58,
+    resumeReviewScore: 58,
     interviewScore: 54,
     status: 'action_required',
     statusLabel: 'Needs Remediation',
@@ -68,7 +68,7 @@ export const MOCK_STUDENTS = [
     department: 'CSE',
     cgpa: 8.91,
     readinessScore: 86,
-    atsScore: 88,
+    resumeReviewScore: 88,
     interviewScore: 83,
     status: 'offer',
     statusLabel: 'Offer (Freshworks)',
@@ -83,7 +83,7 @@ export const MOCK_STUDENTS = [
     department: 'IT',
     cgpa: 7.45,
     readinessScore: 62,
-    atsScore: 60,
+    resumeReviewScore: 60,
     interviewScore: 65,
     status: 'applied',
     statusLabel: 'OA Pending',
@@ -126,6 +126,9 @@ export const coordinatorService = {
     }
     return api.get('/coordinator/students');
   },
+
+  getMentors: async () => api.get('/coordinator/mentors'),
+  assignMentor: async (studentId, mentorId) => api.put(`/coordinator/students/${studentId}/mentor`, { mentorId: mentorId || null }),
 
   getAnalytics: async () => {
     if (USE_MOCK) {

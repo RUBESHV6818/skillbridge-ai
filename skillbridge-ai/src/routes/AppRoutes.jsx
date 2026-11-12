@@ -1,42 +1,45 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './ProtectedRoute';
 import AppLayout from '../layouts/AppLayout';
 import PublicLayout from '../layouts/PublicLayout';
 
 // Public Pages
-import LandingPage from '../pages/public/LandingPage';
-import LoginPage from '../pages/auth/LoginPage';
-import RegisterPage from '../pages/auth/RegisterPage';
-import ForgotPasswordPage from '../pages/auth/ForgotPasswordPage';
+const LandingPage = lazy(() => import('../pages/public/LandingPage'));
+const LoginPage = lazy(() => import('../pages/auth/LoginPage'));
+const RegisterPage = lazy(() => import('../pages/auth/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('../pages/auth/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('../pages/auth/ResetPasswordPage'));
+const VerifyPage = lazy(() => import('../pages/auth/VerifyPage'));
 
 // Student Pages
-import CareerDashboardPage from '../pages/student/CareerDashboardPage';
-import ResumeManagementPage from '../pages/student/ResumeManagementPage';
-import ResumeIntelligencePage from '../pages/student/ResumeIntelligencePage';
-import JDMatcherPage from '../pages/student/JDMatcherPage';
-import SkillGapPage from '../pages/student/SkillGapPage';
-import RoadmapPage from '../pages/student/RoadmapPage';
-import MockInterviewPage from '../pages/student/MockInterviewPage';
-import PlacementTrackerPage from '../pages/student/PlacementTrackerPage';
-import CareerReportPage from '../pages/student/CareerReportPage';
-import ProfilePage from '../pages/student/ProfilePage';
-import NotificationsPage from '../pages/student/NotificationsPage';
+const CareerDashboardPage = lazy(() => import('../pages/student/CareerDashboardPage'));
+const ResumeManagementPage = lazy(() => import('../pages/student/ResumeManagementPage'));
+const ResumeIntelligencePage = lazy(() => import('../pages/student/ResumeIntelligencePage'));
+const JDMatcherPage = lazy(() => import('../pages/student/JDMatcherPage'));
+const SkillGapPage = lazy(() => import('../pages/student/SkillGapPage'));
+const RoadmapPage = lazy(() => import('../pages/student/RoadmapPage'));
+const MockInterviewPage = lazy(() => import('../pages/student/MockInterviewPage'));
+const PlacementTrackerPage = lazy(() => import('../pages/student/PlacementTrackerPage'));
+const CareerReportPage = lazy(() => import('../pages/student/CareerReportPage'));
+const ProfilePage = lazy(() => import('../pages/student/ProfilePage'));
+const NotificationsPage = lazy(() => import('../pages/student/NotificationsPage'));
 
 // Coordinator Pages
-import CohortOverviewPage from '../pages/coordinator/CohortOverviewPage';
-import PlacementAnalyticsPage from '../pages/coordinator/PlacementAnalyticsPage';
+const CohortOverviewPage = lazy(() => import('../pages/coordinator/CohortOverviewPage'));
+const PlacementAnalyticsPage = lazy(() => import('../pages/coordinator/PlacementAnalyticsPage'));
 
 // Mentor Pages
-import AssignedStudentsPage from '../pages/mentor/AssignedStudentsPage';
-import ReviewQueuePage from '../pages/mentor/ReviewQueuePage';
+const AssignedStudentsPage = lazy(() => import('../pages/mentor/AssignedStudentsPage'));
+const ReviewQueuePage = lazy(() => import('../pages/mentor/ReviewQueuePage'));
 
 // Admin Pages
-import UserDirectoryPage from '../pages/admin/UserDirectoryPage';
-import PlatformSettingsPage from '../pages/admin/PlatformSettingsPage';
+const UserDirectoryPage = lazy(() => import('../pages/admin/UserDirectoryPage'));
+const PlatformSettingsPage = lazy(() => import('../pages/admin/PlatformSettingsPage'));
 
 export const AppRoutes = () => {
   return (
+    <Suspense fallback={<div role="status" style={{ padding: 24 }}>Loading page…</div>}>
     <Routes>
       {/* Public Pages with Topbar/Footer */}
       <Route element={<PublicLayout />}>
@@ -47,6 +50,8 @@ export const AppRoutes = () => {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/verify" element={<VerifyPage />} />
 
       {/* Authenticated Application Shell */}
       <Route
@@ -127,6 +132,7 @@ export const AppRoutes = () => {
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
+    </Suspense>
   );
 };
 

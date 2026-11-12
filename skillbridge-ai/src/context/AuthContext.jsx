@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import authService, { MOCK_USERS } from '../services/authService';
+import { USE_MOCK } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -8,16 +9,19 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Initial check from localStorage or default to student mock for seamless developer evaluation
     const storedUser = authService.getCurrentUser();
-    if (storedUser) {
+    const token = authService.getToken();
+
+    if (storedUser && token) {
       setUser(storedUser);
-    } else {
-      // Default to student demo user so evaluators can instantly view the app
+    } else if (USE_MOCK) {
+      // Default to student demo user only in mock mode
       const defaultUser = MOCK_USERS.student;
       localStorage.setItem('skillbridge_user', JSON.stringify(defaultUser));
       localStorage.setItem('skillbridge_token', `sb_mock_jwt_student_init`);
       setUser(defaultUser);
+    } else {
+      setUser(null);
     }
     setLoading(false);
   }, []);
@@ -26,8 +30,21 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const res = await authService.login(email, password);
-      setUser(res.data.user);
-      return res.data.user;
+      const enriched = authService.getCurrentUser() || res.data.user;
+      setUser(enriched);
+      return enriched;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const demoLogin = async (personaRole) => {
+    setLoading(true);
+    try {
+      const res = await authService.demoLogin(personaRole);
+      const enriched = authService.getCurrentUser() || res.data.user;
+      setUser(enriched);
+      return enriched;
     } finally {
       setLoading(false);
     }
@@ -37,8 +54,10 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const res = await authService.register(userData);
-      setUser(res.data.user);
-      return res.data.user;
+      const payload = res.data || res;
+      if (payload.token && payload.user?.verified !== false) setUser(payload.user);
+      else setUser(null);
+      return payload;
     } finally {
       setLoading(false);
     }
@@ -49,15 +68,16 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  // Dev-only role switcher to evaluate Student, Placement Coordinator, Career Mentor, Admin seamlessly
-  const switchRoleDev = (targetRole) => {
-    if (MOCK_USERS[targetRole]) {
-      const switchedUser = MOCK_USERS[targetRole];
-      localStorage.setItem('skillbridge_user', JSON.stringify(switchedUser));
-      localStorage.setItem('skillbridge_token', `sb_mock_jwt_${targetRole}_dev`);
-      setUser(switchedUser);
-    }
+  const updateUser = (updatedUser) => {
+    setUser((current) => {
+      const nextUser = { ...current, ...updatedUser };
+      localStorage.setItem('skillbridge_user', JSON.stringify(nextUser));
+      return nextUser;
+    });
   };
+
+  // Demo role changes must use a real backend session, not a frontend-only token.
+  const switchRoleDev = demoLogin;
 
   const value = {
     user,
@@ -65,8 +85,10 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: Boolean(user),
     loading,
     login,
+    demoLogin,
     register,
     logout,
+    updateUser,
     switchRoleDev,
   };
 
@@ -81,4 +103,3 @@ export const useAuth = () => {
   return context;
 };
 
-export default AuthContext;

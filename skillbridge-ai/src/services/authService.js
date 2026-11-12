@@ -5,7 +5,7 @@ export const MOCK_USERS = {
   student: {
     id: 'usr_stu_001',
     name: 'Aarthi Raman',
-    email: 'aarthi.raman@cit.edu.in',
+    email: 'aarthi.raman@student.demo.skillbridge.local',
     role: 'student',
     avatar: 'AR',
     department: 'Computer Science and Engineering',
@@ -13,6 +13,7 @@ export const MOCK_USERS = {
     batchYear: 2025,
     cgpa: 8.42,
     targetRole: 'Full Stack Engineer',
+    targetRoleConfirmed: true,
     careerHealthScore: 74,
     resumeScore: 72,
     interviewScore: 68,
@@ -27,7 +28,7 @@ export const MOCK_USERS = {
   coordinator: {
     id: 'usr_coord_001',
     name: 'Prof. K. Soundararajan',
-    email: 'placement.cell@cit.edu.in',
+    email: 'placement.cell@coordinator.demo.skillbridge.local',
     role: 'coordinator',
     avatar: 'KS',
     department: 'Training & Placement Directorate',
@@ -40,7 +41,7 @@ export const MOCK_USERS = {
   mentor: {
     id: 'usr_mentor_001',
     name: 'Priya Sundaram',
-    email: 'priya.sundaram@alumni.cit.edu.in',
+    email: 'priya.sundaram@mentor.demo.skillbridge.local',
     role: 'mentor',
     avatar: 'PS',
     currentCompany: 'Freshworks',
@@ -52,7 +53,7 @@ export const MOCK_USERS = {
   admin: {
     id: 'usr_adm_001',
     name: 'Rajeshwaran S',
-    email: 'admin@skillbridge.edu.in',
+    email: 'admin@admin.demo.skillbridge.local',
     role: 'admin',
     avatar: 'RS',
     designation: 'Platform Administrator',
@@ -60,6 +61,16 @@ export const MOCK_USERS = {
 };
 
 export const authService = {
+  demoLogin: async (role) => {
+    const response = await api.post('/auth/demo-login', { role });
+    if (response.data.token) {
+      localStorage.setItem('skillbridge_token', response.data.token);
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('skillbridge_user', JSON.stringify(response.data.user));
+    }
+    return response;
+  },
+
   login: async (email, password) => {
     if (USE_MOCK) {
       // Find matching mock user or default to student
@@ -82,6 +93,7 @@ export const authService = {
       };
 
       localStorage.setItem('skillbridge_token', mockResponse.token);
+      localStorage.setItem('token', mockResponse.token);
       localStorage.setItem('skillbridge_user', JSON.stringify(mockResponse.user));
       return mockDelay(mockResponse, 300);
     }
@@ -89,6 +101,7 @@ export const authService = {
     const response = await api.post('/auth/login', { email, password });
     if (response.data.token) {
       localStorage.setItem('skillbridge_token', response.data.token);
+      localStorage.setItem('token', response.data.token);
       localStorage.setItem('skillbridge_user', JSON.stringify(response.data.user));
     }
     return response;
@@ -101,6 +114,7 @@ export const authService = {
         name: registrationData.name,
         email: registrationData.email,
         role: registrationData.role || 'student',
+        verified: true,
         avatar: registrationData.name
           .split(' ')
           .map((n) => n[0])
@@ -110,7 +124,8 @@ export const authService = {
         department: registrationData.department || 'Computer Science and Engineering',
         college: registrationData.college || 'Engineering College',
         batchYear: registrationData.batchYear || 2025,
-        targetRole: registrationData.targetRole || 'Software Development Engineer',
+        targetRole: registrationData.targetRole || '',
+        targetRoleConfirmed: Boolean(registrationData.targetRole),
         careerHealthScore: 60,
         resumeScore: 58,
         interviewScore: 50,
@@ -122,14 +137,20 @@ export const authService = {
       };
 
       localStorage.setItem('skillbridge_token', mockResponse.token);
+      localStorage.setItem('token', mockResponse.token);
       localStorage.setItem('skillbridge_user', JSON.stringify(newUser));
       return mockDelay(mockResponse, 350);
     }
 
     const response = await api.post('/auth/register', registrationData);
-    if (response.data.token) {
+    if (response.data.token && response.data.user?.verified !== false) {
       localStorage.setItem('skillbridge_token', response.data.token);
+      localStorage.setItem('token', response.data.token);
       localStorage.setItem('skillbridge_user', JSON.stringify(response.data.user));
+    } else {
+      localStorage.removeItem('skillbridge_token');
+      localStorage.removeItem('token');
+      localStorage.removeItem('skillbridge_user');
     }
     return response;
   },
@@ -138,18 +159,55 @@ export const authService = {
     const raw = localStorage.getItem('skillbridge_user');
     if (!raw) return null;
     try {
-      return JSON.parse(raw);
+      const u = JSON.parse(raw);
+      if (!u) return null;
+      return {
+        id: u.id || u._id,
+        _id: u._id || u.id,
+        name: u.name || 'Student',
+        email: u.email || '',
+        role: u.role || 'student',
+        avatar: (u.name || 'S')
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .toUpperCase()
+          .slice(0, 2),
+        department: u.department || '',
+        college: u.college || '',
+        batchYear: u.batchYear ?? '',
+        cgpa: u.cgpa ?? '',
+        phone: u.phone || '',
+        targetRole: u.targetRole || '',
+        linkedin: u.linkedin || '',
+        github: u.github || '',
+        notificationPreferences: u.notificationPreferences || {
+          driveAlerts: true,
+          mentorComments: true,
+          weeklyRoadmapReminders: false,
+        },
+        ...u,
+      };
     } catch {
       return null;
     }
   },
 
+  getProfile: async () => api.get('/auth/me'),
+
+  updateProfile: async (profile) => {
+    const response = await api.put('/auth/me', profile);
+    localStorage.setItem('skillbridge_user', JSON.stringify(response.data));
+    return response;
+  },
+
   getToken: () => {
-    return localStorage.getItem('skillbridge_token');
+    return localStorage.getItem('skillbridge_token') || localStorage.getItem('token');
   },
 
   logout: async () => {
     localStorage.removeItem('skillbridge_token');
+    localStorage.removeItem('token');
     localStorage.removeItem('skillbridge_user');
     if (!USE_MOCK) {
       try {
@@ -169,6 +227,15 @@ export const authService = {
     }
     return api.post('/auth/forgot-password', { email });
   },
+
+  resendVerification: async (email) => {
+    if (USE_MOCK) {
+      return mockDelay({ message: 'Demo accounts are already verified. You can sign in with a demo persona.' }, 300);
+    }
+    return api.post('/auth/resend-verification', { email });
+  },
+
+  resetPassword: async ({ email, token, password }) => api.post('/auth/reset-password', { email, token, password }),
 };
 
 export default authService;

@@ -15,6 +15,15 @@ exports.authenticate = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({ message: 'Invalid token' });
     }
+    if (user.passwordChangedAt && decoded.iat < Math.floor(user.passwordChangedAt.getTime() / 1000)) {
+      return res.status(401).json({ message: 'Your password changed. Please sign in again.' });
+    }
+    if (!user.verified) {
+      return res.status(403).json({ message: 'Email not verified' });
+    }
+    if (user.status === 'suspended') {
+      return res.status(403).json({ message: 'This account has been suspended. Contact your platform administrator.' });
+    }
     req.user = user;
     next();
   } catch (err) {

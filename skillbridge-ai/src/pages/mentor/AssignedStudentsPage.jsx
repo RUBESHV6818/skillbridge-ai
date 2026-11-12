@@ -21,19 +21,14 @@ import {
 import { Link as RouterLink } from 'react-router-dom';
 import { PageHeader } from '../../components/common/PageHeader';
 import { colors } from '../../theme/theme';
-import coordinatorService from '../../services/coordinatorService';
+import mentorService from '../../services/mentorService';
 
 export const AssignedStudentsPage = () => {
   const [mentees, setMentees] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    coordinatorService.getCohortStudents().then((res) => {
-      // Filter mentees assigned to Priya Sundaram
-      const assigned = res.data.filter((s) => s.mentor === 'Priya Sundaram');
-      setMentees(assigned);
-      setLoading(false);
-    });
+    mentorService.getAssignedStudents().then((res) => setMentees(res.data)).catch(() => setMentees([])).finally(() => setLoading(false));
   }, []);
 
   if (loading) {
@@ -49,7 +44,7 @@ export const AssignedStudentsPage = () => {
     <Box>
       <PageHeader
         title="Assigned Mentees (Industry Mentorship Track)"
-        subtitle="You are mentoring 3 final-year CSE students preparing for Tier-1 Product Engineering drives."
+        subtitle={`${mentees.length} student${mentees.length === 1 ? '' : 's'} currently assigned to you.`}
         action={
           <Button
             component={RouterLink}
@@ -58,7 +53,7 @@ export const AssignedStudentsPage = () => {
             startIcon={<FileText size={15} />}
             sx={{ fontSize: '0.8125rem' }}
           >
-            Review Queue (3 Pending)
+            Review Queue
           </Button>
         }
       />
@@ -77,22 +72,22 @@ export const AssignedStudentsPage = () => {
                       {mentee.name}
                     </Typography>
                     <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                      {mentee.rollNo} • {mentee.department} • CGPA: {mentee.cgpa}
+                    {mentee.email} • {mentee.department} • CGPA: {mentee.cgpa ?? '—'}
                     </Typography>
                   </Box>
                 </Box>
 
                 <Box sx={{ p: 1.75, borderRadius: 1.5, backgroundColor: colors.surfaceSubtle, border: `1px solid ${colors.borderLight}`, mb: 2 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
-                    <Typography variant="caption" sx={{ color: colors.inkSecondary }}>Placement Readiness Score:</Typography>
+                    <Typography variant="caption" sx={{ color: colors.inkSecondary }}>AI Resume Review:</Typography>
                     <Typography variant="caption" sx={{ fontWeight: 700, color: colors.accent, fontVariantNumeric: 'tabular-nums' }}>
-                      {mentee.readinessScore}/100
+                      {mentee.resumeReviewScore == null ? '—' : `${mentee.resumeReviewScore}/100`}
                     </Typography>
                   </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
-                    <Typography variant="caption" sx={{ color: colors.inkSecondary }}>ATS Resume Score:</Typography>
+                    <Typography variant="caption" sx={{ color: colors.inkSecondary }}>Latest Interview Score:</Typography>
                     <Typography variant="caption" sx={{ fontWeight: 600, color: colors.success, fontVariantNumeric: 'tabular-nums' }}>
-                      {mentee.atsScore}%
+                      {mentee.interviewScore == null ? '—' : `${mentee.interviewScore}/100`}
                     </Typography>
                   </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -106,7 +101,7 @@ export const AssignedStudentsPage = () => {
 
               <Box sx={{ pt: 2, borderTop: `1px solid ${colors.borderLight}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                  Active {mentee.lastActive}
+                  {mentee.pendingReviews} pending review{mentee.pendingReviews === 1 ? '' : 's'}
                 </Typography>
                 <Button
                   component={RouterLink}
@@ -122,6 +117,7 @@ export const AssignedStudentsPage = () => {
             </Card>
           </Grid>
         ))}
+        {!mentees.length && <Grid item xs={12}><Card sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}><Typography variant="body1" sx={{ fontWeight: 600, color: colors.ink }}>No students are assigned to you yet.</Typography><Typography variant="body2" sx={{ mt: 1, color: colors.inkSecondary }}>A placement coordinator can assign students from the cohort directory.</Typography></Card></Grid>}
       </Grid>
     </Box>
   );

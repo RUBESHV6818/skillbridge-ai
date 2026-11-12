@@ -36,6 +36,7 @@ import roadmapService from '../../services/roadmapService';
 export const RoadmapPage = () => {
   const [roadmap, setRoadmap] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [toast, setToast] = useState(null);
 
   // Regenerate dialog state
@@ -44,9 +45,14 @@ export const RoadmapPage = () => {
   const [regenerating, setRegenerating] = useState(false);
 
   const fetchRoadmap = async () => {
+    setLoading(true);
+    setLoadError('');
     try {
       const res = await roadmapService.getRoadmap();
       setRoadmap(res.data);
+      setRegenerateFocus(res.data.focus || 'fullstack');
+    } catch {
+      setLoadError('Could not load your roadmap. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -72,10 +78,12 @@ export const RoadmapPage = () => {
             completed: allCompleted,
           };
         });
+        const currentWeek = updatedWeeks.find((week) => !week.completed)?.weekNumber || updatedWeeks.length;
         return {
           ...prev,
           progressPercent: res.data.progressPercent,
           completedTasksCount: res.data.completedTasksCount,
+          currentWeek,
           weeks: updatedWeeks,
         };
       });
@@ -91,6 +99,8 @@ export const RoadmapPage = () => {
       setToast({ type: 'success', text: res.data.message });
       setOpenRegenerate(false);
       fetchRoadmap();
+    } catch {
+      setToast({ type: 'error', text: 'Could not regenerate your roadmap. Please try again.' });
     } finally {
       setRegenerating(false);
     }
@@ -99,9 +109,27 @@ export const RoadmapPage = () => {
   if (loading) {
     return (
       <Box>
-        <PageHeader title="AI Learning Roadmap" subtitle="Structuring personalized week-by-week curriculum..." />
+        <PageHeader title="Learning Roadmap" subtitle="Loading your saved six-week curriculum..." />
         <Skeleton variant="rounded" height={140} sx={{ mb: 3, borderRadius: 2 }} />
         <Skeleton variant="rounded" height={380} sx={{ borderRadius: 2 }} />
+      </Box>
+    );
+  }
+
+  if (loadError || !roadmap) {
+    return (
+      <Box>
+        <PageHeader title="Learning Roadmap" subtitle="A role-based six-week plan for building placement-ready skills." />
+        <Alert
+          severity="error"
+          action={(
+            <Button color="inherit" size="small" onClick={fetchRoadmap}>
+              Try again
+            </Button>
+          )}
+        >
+          {loadError || 'Your roadmap could not be displayed.'}
+        </Alert>
       </Box>
     );
   }
@@ -109,8 +137,8 @@ export const RoadmapPage = () => {
   return (
     <Box>
       <PageHeader
-        title="AI Learning Roadmap"
-        subtitle="A sequenced 6-week curriculum tailored to your detected skill gaps for upcoming campus placement drives."
+        title="Learning Roadmap"
+        subtitle="A role-focused six-week plan with saved weekly tasks and progress."
         action={
           <Button
             variant="outlined"
@@ -130,6 +158,18 @@ export const RoadmapPage = () => {
           sx={{ mb: 3, borderRadius: 1.5, fontSize: '0.84375rem' }}
         >
           {toast.text}
+        </Alert>
+      )}
+
+      {roadmap.basedOnResumeName && roadmap.personalizedSkills?.length > 0 ? (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          {roadmap.generatedBy?.includes('skill-gap analysis') ? `This six-week plan was generated from your ${roadmap.generatedBy.replace(' skill-gap analysis', '')} skill-gap analysis for ` : 'Focus tasks were added after checking '}
+          <strong>{roadmap.basedOnResumeName}</strong>. Skills not evidenced in the resume: {roadmap.personalizedSkills.join(', ')}. A skill may be present but phrased differently.
+          {roadmap.generatorVersion === 2 && ' Each gap includes learning and proof-of-work tasks.'}
+        </Alert>
+      ) : (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          This plan follows your selected role track. Upload a resume to add tasks for skills not detected in its text.
         </Alert>
       )}
 
@@ -348,11 +388,11 @@ export const RoadmapPage = () => {
         PaperProps={{ sx: { borderRadius: 2 } }}
       >
         <DialogTitle sx={{ fontWeight: 700, fontFamily: "'Playfair Display', Georgia, serif" }}>
-          Regenerate AI Learning Roadmap
+          Update Learning Roadmap
         </DialogTitle>
         <DialogContent sx={{ py: 1 }}>
           <Typography variant="body2" sx={{ color: colors.inkSecondary, mb: 2, fontSize: '0.84375rem', lineHeight: 1.55 }}>
-            Recalculate your week-by-week preparation plan. The AI engine will re-align all remaining tasks to prioritize upcoming campus drive dates and newly detected gaps.
+            Choose a different role track or rebuild this curated six-week plan. Completed tasks that also appear in the updated plan will stay complete; tasks that are new will start unchecked.
           </Typography>
 
           <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.75 }}>

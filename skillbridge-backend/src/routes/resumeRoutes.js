@@ -23,7 +23,10 @@ router.patch('/:id/set-primary', setPrimaryResume);
 // DELETE /api/resumes/:id - delete a resume
 router.delete('/:id', deleteResume);
 
-// GET /api/resumes/:id/intelligence - placeholder intelligence data
+// GET /api/resumes/intelligence - primary/latest resume intelligence
+router.get('/intelligence', getIntelligence);
+
+// GET /api/resumes/:id/intelligence - specific resume intelligence
 router.get('/:id/intelligence', getIntelligence);
 
 module.exports = router;

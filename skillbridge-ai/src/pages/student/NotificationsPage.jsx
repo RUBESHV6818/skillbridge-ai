@@ -1,180 +1,132 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Box,
-  Card,
-  Typography,
   Button,
+  Card,
   Chip,
-  IconButton,
-  Tooltip,
+  Skeleton,
+  Typography,
 } from '@mui/material';
-import {
-  Bell,
-  CheckCircle2,
-  Calendar,
-  Briefcase,
-  MessageSquare,
-  Clock,
-  Check,
-} from 'lucide-react';
+import { Check, Bell } from 'lucide-react';
 import { PageHeader } from '../../components/common/PageHeader';
 import { colors } from '../../theme/theme';
+import notificationService from '../../services/notificationService';
+
+function relativeTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const elapsed = Math.max(0, Date.now() - date.getTime());
+  const minutes = Math.floor(elapsed / 60000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes} min${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return date.toLocaleDateString();
+}
 
 export const NotificationsPage = () => {
-  const [filter, setFilter] = useState('all'); // 'all' | 'unread'
-  const [notifications, setNotifications] = useState([
-    {
-      id: 'notif_01',
-      title: 'Freshworks Technical Round 2 Scheduled',
-      message: 'Your 1-on-1 interview with Senior Product Engineer is scheduled for tomorrow at 2:30 PM. Focus areas: React Virtual DOM, API latency, and automated testing.',
-      category: 'Interview Alert',
-      time: '15 mins ago',
-      unread: true,
-      type: 'interview',
-    },
-    {
-      id: 'notif_02',
-      title: 'Zoho Corporation Offer Acceptance Deadline',
-      message: 'Formal confirmation for the Member Technical Staff (₹5.6 LPA CTC) offer must be verified with the Training & Placement Directorate by October 28.',
-      category: 'Placement Cell',
-      time: '2 hours ago',
-      unread: true,
-      type: 'offer',
-    },
-    {
-      id: 'notif_03',
-      title: 'Priya Sundaram (Mentor) Approved Your Bullet Point',
-      message: 'Feedback: "Excellent reformulation of the Razorpay cart bullet. The 28% latency reduction metric gives a clear signal to hiring managers."',
-      category: 'Mentorship',
-      time: 'Yesterday at 4:30 PM',
-      unread: false,
-      type: 'mentor',
-    },
-    {
-      id: 'notif_04',
-      title: 'TCS Digital NQT Scorecard Published',
-      message: 'Your overall NQT score of 84 percentile qualifies for the Systems Engineer interview round. Interview slots will open shortly on the TCS NextStep portal.',
-      category: 'Assessment',
-      time: '2 days ago',
-      unread: false,
-      type: 'drive',
-    },
-  ]);
+  const [filter, setFilter] = useState('all');
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState('');
+  const [error, setError] = useState('');
 
-  const handleMarkAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+  useEffect(() => {
+    let active = true;
+    notificationService.getNotifications().then(({ data }) => {
+      if (active) setNotifications(data.notifications || []);
+    }).catch((err) => {
+      if (active) setError(err.response?.data?.message || 'Could not load notifications. Please try again.');
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const unreadCount = useMemo(() => notifications.filter((item) => item.unread).length, [notifications]);
+  const filtered = useMemo(() => filter === 'unread'
+    ? notifications.filter((item) => item.unread)
+    : notifications, [filter, notifications]);
+
+  const handleMarkAllRead = async () => {
+    setBusyId('all');
+    setError('');
+    try {
+      await notificationService.markAllRead();
+      setNotifications((items) => items.map((item) => ({ ...item, unread: false })));
+      window.dispatchEvent(new Event('skillbridge:notifications-updated'));
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not update notifications. Please try again.');
+    } finally {
+      setBusyId('');
+    }
   };
 
-  const handleToggleRead = (id) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, unread: !n.unread } : n))
-    );
+  const handleToggleRead = async (item) => {
+    setBusyId(item.id);
+    setError('');
+    try {
+      const { data } = await notificationService.setRead(item.id, item.unread);
+      setNotifications((items) => items.map((current) => current.id === item.id ? data : current));
+      window.dispatchEvent(new Event('skillbridge:notifications-updated'));
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not update this notification. Please try again.');
+    } finally {
+      setBusyId('');
+    }
   };
-
-  const filtered = notifications.filter((n) => {
-    if (filter === 'unread') return n.unread;
-    return true;
-  });
 
   return (
     <Box>
       <PageHeader
-        title="Notifications & Drive Circulars"
-        subtitle="Placement cell announcements, interview slot confirmations, and mentor feedback messages."
-        action={
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<Check size={14} />}
-            onClick={handleMarkAllRead}
-            sx={{ fontSize: '0.78125rem' }}
-          >
-            Mark all as read
-          </Button>
-        }
+        title="Notifications"
+        subtitle="In-app updates from resume uploads, interview practice, placement tracking, and mentor feedback."
+        action={unreadCount > 0 && <Button variant="outlined" size="small" startIcon={<Check size={14} />} onClick={handleMarkAllRead} disabled={busyId !== ''} sx={{ fontSize: '0.78125rem' }}>Mark all as read</Button>}
       />
 
-      {/* Filter Tabs */}
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
       <Box sx={{ display: 'flex', gap: 1, mb: 2.5 }}>
         {[
           { id: 'all', label: `All (${notifications.length})` },
-          { id: 'unread', label: `Unread (${notifications.filter((n) => n.unread).length})` },
+          { id: 'unread', label: `Unread (${unreadCount})` },
         ].map((tab) => (
-          <Box
-            key={tab.id}
-            onClick={() => setFilter(tab.id)}
-            sx={{
-              cursor: 'pointer',
-              px: 1.5,
-              py: 0.5,
-              borderRadius: 1,
-              fontSize: '0.78125rem',
-              fontWeight: filter === tab.id ? 600 : 500,
-              backgroundColor: filter === tab.id ? colors.accentLight : colors.surfaceSubtle,
-              color: filter === tab.id ? colors.accent : colors.inkSecondary,
-              border: `1px solid ${filter === tab.id ? colors.accentBorder : colors.borderLight}`,
-            }}
-          >
+          <Box key={tab.id} component="button" type="button" onClick={() => setFilter(tab.id)} sx={{ cursor: 'pointer', px: 1.5, py: 0.5, borderRadius: 1, fontSize: '0.78125rem', fontWeight: filter === tab.id ? 600 : 500, backgroundColor: filter === tab.id ? colors.accentLight : colors.surfaceSubtle, color: filter === tab.id ? colors.accent : colors.inkSecondary, border: `1px solid ${filter === tab.id ? colors.accentBorder : colors.borderLight}` }}>
             {tab.label}
           </Box>
         ))}
       </Box>
 
-      {/* Notifications List */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        {filtered.map((item) => (
-          <Card
-            key={item.id}
-            sx={{
-              p: 2.5,
-              borderRadius: 2,
-              border: item.unread ? `1.5px solid ${colors.accentBorder}` : `1px solid ${colors.border}`,
-              backgroundColor: item.unread ? colors.surface : colors.surfaceSubtle,
-              transition: 'all 120ms ease',
-            }}
-          >
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {item.unread && (
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: colors.accent }} />
-                )}
-                <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.875rem', color: colors.ink }}>
-                  {item.title}
-                </Typography>
-                <Chip
-                  label={item.category}
-                  size="small"
-                  sx={{
-                    height: 18,
-                    fontSize: '0.65rem',
-                    fontWeight: 600,
-                    backgroundColor: colors.surfaceSubtle,
-                    color: colors.inkSecondary,
-                  }}
-                />
+      {loading ? <Box sx={{ display: 'grid', gap: 1.5 }}>{[1, 2, 3].map((item) => <Skeleton key={item} variant="rounded" height={95} />)}</Box> : (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {filtered.map((item) => (
+            <Card key={item.id} sx={{ p: 2.5, borderRadius: 2, border: item.unread ? `1.5px solid ${colors.accentBorder}` : `1px solid ${colors.border}`, backgroundColor: item.unread ? colors.surface : colors.surfaceSubtle }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1, gap: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                  {item.unread && <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: colors.accent }} />}
+                  <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.875rem', color: colors.ink }}>{item.title}</Typography>
+                  <Chip label={item.category} size="small" sx={{ height: 18, fontSize: '0.65rem', fontWeight: 600, backgroundColor: colors.surfaceSubtle, color: colors.inkSecondary }} />
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
+                  <Typography variant="caption" sx={{ color: colors.inkSecondary, fontSize: '0.71875rem' }}>{relativeTime(item.createdAt)}</Typography>
+                  <Button size="small" variant="text" disabled={busyId !== ''} onClick={() => handleToggleRead(item)} sx={{ p: 0, minWidth: 'auto', fontSize: '0.71875rem', color: colors.inkSecondary }}>
+                    {busyId === item.id ? 'Saving…' : item.unread ? 'Mark read' : 'Mark unread'}
+                  </Button>
+                </Box>
               </Box>
-
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <Typography variant="caption" sx={{ color: colors.inkSecondary, fontSize: '0.71875rem' }}>
-                  {item.time}
-                </Typography>
-                <Button
-                  size="small"
-                  variant="text"
-                  onClick={() => handleToggleRead(item.id)}
-                  sx={{ p: 0, minWidth: 'auto', fontSize: '0.71875rem', color: colors.inkSecondary }}
-                >
-                  {item.unread ? 'Mark read' : 'Mark unread'}
-                </Button>
-              </Box>
-            </Box>
-
-            <Typography variant="body2" sx={{ color: colors.inkSecondary, fontSize: '0.84375rem', lineHeight: 1.55 }}>
-              {item.message}
-            </Typography>
-          </Card>
-        ))}
-      </Box>
+              <Typography variant="body2" sx={{ color: colors.inkSecondary, fontSize: '0.84375rem', lineHeight: 1.55 }}>{item.message}</Typography>
+            </Card>
+          ))}
+          {!filtered.length && <Card sx={{ p: 5, textAlign: 'center', borderRadius: 2 }}>
+            <Bell size={24} color={colors.inkTertiary} />
+            <Typography variant="body1" sx={{ mt: 1, fontWeight: 600 }}>{filter === 'unread' ? 'You’re all caught up' : 'No notifications yet'}</Typography>
+            <Typography variant="body2" sx={{ mt: 0.5, color: colors.inkSecondary }}>Updates appear here after resume uploads, completed interview practice, placement tracker changes, or mentor feedback.</Typography>
+          </Card>}
+        </Box>
+      )}
     </Box>
   );
 };

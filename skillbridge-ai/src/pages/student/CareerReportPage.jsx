@@ -21,6 +21,7 @@ import {
   Calendar,
   Sparkles,
   Printer,
+  RefreshCw,
 } from 'lucide-react';
 import { PageHeader } from '../../components/common/PageHeader';
 import { ScoreRing } from '../../components/common/ScoreRing';
@@ -30,8 +31,10 @@ import reportService from '../../services/reportService';
 export const CareerReportPage = () => {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [downloading, setDownloading] = useState(false);
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState('');
+  const [downloadError, setDownloadError] = useState('');
 
   // Section picker state
   const [sections, setSections] = useState({
@@ -43,9 +46,13 @@ export const CareerReportPage = () => {
   });
 
   const fetchReport = async () => {
+    setLoading(true);
+    setLoadError('');
     try {
       const res = await reportService.getReportData(sections);
       setReport(res.data);
+    } catch {
+      setLoadError('Could not compile the report from your account data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -59,13 +66,15 @@ export const CareerReportPage = () => {
     setSections((prev) => ({ ...prev, [sec]: !prev[sec] }));
   };
 
-  const handleDownload = async () => {
+  const handleDownload = () => {
     setDownloading(true);
-    setDownloadSuccess(false);
+    setDownloadError('');
     try {
-      await reportService.downloadPdf('rep_current');
-      setDownloadSuccess(true);
-      setTimeout(() => setDownloadSuccess(false), 4000);
+      const result = reportService.downloadReport(report, sections);
+      setDownloadSuccess(result.fileName);
+      setTimeout(() => setDownloadSuccess(''), 5000);
+    } catch {
+      setDownloadError('Could not prepare the report file. Please try again.');
     } finally {
       setDownloading(false);
     }
@@ -80,29 +89,59 @@ export const CareerReportPage = () => {
     );
   }
 
+  if (loadError || !report) {
+    return (
+      <Box>
+        <PageHeader title="Career Readiness Report" subtitle="Compile a report from your saved profile and placement data." />
+        <Alert severity="error" action={<Button color="inherit" size="small" onClick={fetchReport}>Try again</Button>}>
+          {loadError || 'No report data is available.'}
+        </Alert>
+      </Box>
+    );
+  }
+
   return (
     <Box>
       <PageHeader
         title="Career Readiness Report Generator"
-        subtitle="Generate a verified placement credential report for college coordinators, faculty advisors, and campus recruiters."
+        subtitle="Review a snapshot of your profile, resume signals, and placement applications currently on file."
         action={
-          <Button
-            variant="contained"
-            startIcon={<Download size={16} />}
-            onClick={handleDownload}
-            disabled={downloading}
-            sx={{ fontSize: '0.8125rem' }}
-          >
-            {downloading ? 'Compiling PDF Document...' : 'Download Official PDF'}
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="outlined"
+              startIcon={<RefreshCw size={16} />}
+              onClick={fetchReport}
+              disabled={loading}
+              sx={{ fontSize: '0.8125rem' }}
+            >
+              Refresh
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<Download size={16} />}
+              onClick={handleDownload}
+              disabled={downloading}
+              sx={{ fontSize: '0.8125rem' }}
+            >
+              {downloading ? 'Preparing report...' : 'Download Report'}
+            </Button>
+          </Box>
         }
       />
 
+      <style>{`@media print {
+        @page { margin: 16mm; }
+        body * { visibility: hidden !important; }
+        .career-report-document, .career-report-document * { visibility: visible !important; }
+        .career-report-document { position: fixed !important; inset: 0 auto auto 0 !important; width: 100% !important; min-height: 0 !important; padding: 0 !important; border: 0 !important; box-shadow: none !important; z-index: 99999 !important; }
+      }`}</style>
+
       {downloadSuccess && (
         <Alert severity="success" sx={{ mb: 3, borderRadius: 1.5, fontSize: '0.84375rem' }}>
-          Report downloaded: <strong>SkillBridge_Readiness_Report_Aarthi_Raman.pdf</strong>. Generated with cryptographic hash for placement verification.
+          Downloaded <strong>{downloadSuccess}</strong>. Open it in a browser to print or save as PDF.
         </Alert>
       )}
+      {downloadError && <Alert severity="error" sx={{ mb: 3 }}>{downloadError}</Alert>}
 
       <Grid container spacing={3.5}>
         {/* Left Column: Section Picker Controls */}
@@ -118,10 +157,10 @@ export const CareerReportPage = () => {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               {[
                 { id: 'summary', label: 'Student Profile & CGPA' },
-                { id: 'scores', label: 'Composite Health & ATS Scores' },
+                { id: 'scores', label: 'Composite Health & AI Scores' },
                 { id: 'skills', label: 'Verified Technical Skills & Gaps' },
                 { id: 'pipeline', label: 'Placement Offers & Active Funnel' },
-                { id: 'interviews', label: 'Mock Interview Transcript Audit' },
+                { id: 'interviews', label: 'Mock Interview Activity & Score' },
               ].map((item) => (
                 <FormControlLabel
                   key={item.id}
@@ -145,7 +184,7 @@ export const CareerReportPage = () => {
             <Divider sx={{ my: 2.5 }} />
 
             <Typography variant="caption" sx={{ color: colors.inkSecondary, display: 'block', lineHeight: 1.5, mb: 2 }}>
-              This document serves as your verified placement cell readiness passport for campus eligibility.
+              Personal planning report based on saved account data. Scores are estimates; resume mentions are evidence to review, not proof of proficiency or placement eligibility.
             </Typography>
 
             <Button
@@ -163,6 +202,7 @@ export const CareerReportPage = () => {
         {/* Right Column: Live Editorial Document Preview */}
         <Grid item xs={12} md={8}>
           <Card
+            className="career-report-document"
             sx={{
               p: { xs: 3, sm: 5 },
               borderRadius: 2,
@@ -189,12 +229,12 @@ export const CareerReportPage = () => {
                     Placement Readiness & Skill Audit
                   </Typography>
                   <Typography variant="caption" sx={{ color: colors.inkSecondary, display: 'block', mt: 0.5 }}>
-                    Directorate of Training & Placement • {report.institution}
+                    SkillBridge • {report.institution}{report.placementSeasonYear ? ` · ${report.placementSeasonYear}` : ''}
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: 'right' }}>
                   <Typography variant="caption" sx={{ fontWeight: 700, color: colors.ink, display: 'block' }}>
-                    Document Ref: CIT-SB-2025-0482
+                    Report Ref: {report.reportId}
                   </Typography>
                   <Typography variant="caption" sx={{ color: colors.inkTertiary, fontSize: '0.6875rem' }}>
                     Generated: {report.generatedAt}
@@ -220,11 +260,15 @@ export const CareerReportPage = () => {
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Typography variant="caption" sx={{ color: colors.inkSecondary }}>Cumulative CGPA</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: colors.success }}>{report.student.cgpa}</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: report.student.cgpa === 'Not provided' ? colors.inkSecondary : colors.success }}>{report.student.cgpa}</Typography>
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Typography variant="caption" sx={{ color: colors.inkSecondary }}>Graduation Batch</Typography>
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>{report.student.batch}</Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: colors.inkSecondary }}>Target Role</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{report.student.targetRole}</Typography>
                   </Grid>
                 </Grid>
               </Box>
@@ -237,59 +281,103 @@ export const CareerReportPage = () => {
                   2. Diagnostic Placement Health Index
                 </Typography>
                 <Grid container spacing={2}>
-                  <Grid item xs={4}>
+                  <Grid item xs={6} sm={3}>
                     <Box sx={{ p: 2, textAlign: 'center', borderRadius: 1.5, border: `1px solid ${colors.borderLight}` }}>
                       <Typography variant="h3" sx={{ fontWeight: 700, color: colors.accent, fontVariantNumeric: 'tabular-nums' }}>
-                        {report.readinessSummary.compositeScore}/100
+                        {report.readinessSummary.compositeScore === null ? '—' : `${report.readinessSummary.compositeScore}/100`}
                       </Typography>
                       <Typography variant="caption" sx={{ color: colors.inkSecondary, display: 'block', mt: 0.5 }}>
                         Career Health Composite
                       </Typography>
                     </Box>
                   </Grid>
-                  <Grid item xs={4}>
+                  <Grid item xs={6} sm={3}>
                     <Box sx={{ p: 2, textAlign: 'center', borderRadius: 1.5, border: `1px solid ${colors.borderLight}` }}>
                       <Typography variant="h3" sx={{ fontWeight: 700, color: colors.success, fontVariantNumeric: 'tabular-nums' }}>
-                        {report.scores.atsScore}/100
+                        {report.scores.resumeReviewScore == null ? '—' : `${report.scores.resumeReviewScore}/100`}
                       </Typography>
                       <Typography variant="caption" sx={{ color: colors.inkSecondary, display: 'block', mt: 0.5 }}>
-                        ATS Resume Benchmark
+                        AI Resume Review
                       </Typography>
                     </Box>
                   </Grid>
-                  <Grid item xs={4}>
+                  <Grid item xs={6} sm={3}>
                     <Box sx={{ p: 2, textAlign: 'center', borderRadius: 1.5, border: `1px solid ${colors.borderLight}` }}>
                       <Typography variant="h3" sx={{ fontWeight: 700, color: colors.warning, fontVariantNumeric: 'tabular-nums' }}>
-                        {report.scores.interviewScore}/100
+                        {report.scores.interviewScore === null ? '—' : `${report.scores.interviewScore}/100`}
                       </Typography>
                       <Typography variant="caption" sx={{ color: colors.inkSecondary, display: 'block', mt: 0.5 }}>
                         Mock Interview Fluency
                       </Typography>
                     </Box>
                   </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Box sx={{ p: 2, textAlign: 'center', borderRadius: 1.5, border: `1px solid ${colors.borderLight}` }}>
+                      <Typography variant="h3" sx={{ fontWeight: 700, color: colors.accent, fontVariantNumeric: 'tabular-nums' }}>
+                        {report.scores.skillMatchScore == null ? '—' : `${report.scores.skillMatchScore}/100`}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: colors.inkSecondary, display: 'block', mt: 0.5 }}>
+                        AI Role Alignment
+                      </Typography>
+                    </Box>
+                  </Grid>
                 </Grid>
                 <Typography variant="caption" sx={{ color: colors.inkSecondary, display: 'block', mt: 1, px: 0.5 }}>
-                  Certification: {report.readinessSummary.qualificationStatus} ({report.readinessSummary.cohortPercentile}).
+                  Composite uses the placement cell’s configured weights for saved resume review, role-gap, and mock interview scores. Unavailable scores are excluded. {report.readinessSummary.qualificationStatus}
+                </Typography>
+                <Typography variant="caption" sx={{ color: colors.inkTertiary, display: 'block', mt: 0.5, px: 0.5 }}>
+                  AI sources: {[
+                    report.analysisSources?.resumeReview && `Resume review: ${report.analysisSources.resumeReview}`,
+                    report.analysisSources?.skillGap && `Role analysis: ${report.analysisSources.skillGap}`,
+                    report.analysisSources?.interview && `Interview: ${report.analysisSources.interview}`,
+                  ].filter(Boolean).join(' · ') || 'No saved AI analysis source is available.'}
                 </Typography>
               </Box>
             )}
 
-            {/* 3. Verified Skills & Critical Gaps */}
+            {/* 3. Saved AI role findings and resume evidence */}
             {sections.skills && (
               <Box sx={{ mb: 3.5 }}>
                 <Typography variant="caption" sx={{ color: colors.accent, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block', mb: 1 }}>
-                  3. Verified Technical Competencies
+                  3. Resume Evidence & Role Gaps
+                </Typography>
+                <Typography variant="body2" sx={{ color: colors.inkSecondary, mb: 1.5 }}>
+                  {report.careerSummary}
                 </Typography>
                 <Box sx={{ p: 2, borderRadius: 1.5, border: `1px solid ${colors.borderLight}`, mb: 1.5 }}>
                   <Typography variant="caption" sx={{ fontWeight: 700, color: colors.success, display: 'block', mb: 1 }}>
-                    Audited Proficiencies:
+                    Skills mentioned in the saved role analysis:
                   </Typography>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {report.verifiedSkills.map((sk, idx) => (
+                    {report.detectedSkills.map((sk, idx) => (
                       <Chip key={idx} label={sk} size="small" sx={{ backgroundColor: colors.surfaceSubtle, fontSize: '0.71875rem' }} />
                     ))}
+                    {report.detectedSkills.length === 0 && <Typography variant="body2">No skills are available from a saved role analysis yet. Run Skill Gap Analyzer for this target role.</Typography>}
                   </Box>
                 </Box>
+                <Box sx={{ p: 2, borderRadius: 1.5, border: `1px solid ${colors.borderLight}` }}>
+                  <Typography variant="caption" sx={{ fontWeight: 700, color: colors.warning, display: 'block', mb: 1 }}>
+                    Target skills not evidenced in the saved AI analysis:
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {report.identifiedGaps.map((gap, idx) => (
+                      <Chip key={idx} label={gap} size="small" variant="outlined" sx={{ fontSize: '0.71875rem' }} />
+                    ))}
+                    {report.identifiedGaps.length === 0 && <Typography variant="body2">No missing skills are listed in the saved role analysis.</Typography>}
+                  </Box>
+                </Box>
+                {!!report.priorityActions?.length && (
+                  <Box sx={{ p: 2, mt: 1.5, borderRadius: 1.5, border: `1px solid ${colors.borderLight}` }}>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: colors.accent, display: 'block', mb: 1 }}>
+                      Suggested next steps from your saved role analysis:
+                    </Typography>
+                    {report.priorityActions.map((action, idx) => (
+                      <Typography key={idx} variant="body2" sx={{ color: colors.inkSecondary, mb: idx === report.priorityActions.length - 1 ? 0 : 0.75 }}>
+                        <strong>{action.title}</strong>{action.reason ? ` — ${action.reason}` : ''}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
               </Box>
             )}
 
@@ -300,20 +388,29 @@ export const CareerReportPage = () => {
                   4. Recruitment Offers & Active Pipeline
                 </Typography>
                 <Box sx={{ p: 2, borderRadius: 1.5, border: `1px solid ${colors.borderLight}` }}>
-                  <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
-                    Secured Placement Offer:
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: colors.inkSecondary, mb: 1.5, fontSize: '0.84375rem' }}>
-                    Zoho Corporation • Member Technical Staff (MTS) • Package: <strong>₹5.6 LPA CTC</strong>
-                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>Offers:</Typography>
+                  {report.placementOffers.length > 0 ? report.placementOffers.map((item, idx) => (
+                    <Typography key={idx} variant="body2" sx={{ color: colors.inkSecondary, mb: 1.5, fontSize: '0.84375rem' }}>
+                      {item.company} • {item.role} • {item.package}
+                    </Typography>
+                  )) : <Typography variant="body2" sx={{ color: colors.inkSecondary, mb: 1.5, fontSize: '0.84375rem' }}>No offers recorded.</Typography>}
 
-                  <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
-                    Active In-Progress Drives:
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: colors.inkSecondary, fontSize: '0.84375rem' }}>
-                    Freshworks (Associate Academy, Round 2) • TCS Digital (Systems Engineer, OA Cleared)
-                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>Active applications:</Typography>
+                  {report.activePipelines.length > 0 ? report.activePipelines.map((item, idx) => (
+                    <Typography key={idx} variant="body2" sx={{ color: colors.inkSecondary, fontSize: '0.84375rem' }}>
+                      {item.company} ({item.role}) • {item.stage}
+                    </Typography>
+                  )) : <Typography variant="body2" sx={{ color: colors.inkSecondary, fontSize: '0.84375rem' }}>No active applications recorded.</Typography>}
                 </Box>
+              </Box>
+            )}
+
+            {sections.interviews && (
+              <Box sx={{ mb: 3.5 }}>
+                <Typography variant="caption" sx={{ color: colors.accent, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block', mb: 1 }}>
+                  5. Interview Activity
+                </Typography>
+                <Typography variant="body2" sx={{ color: colors.inkSecondary }}>{report.interviewSummary}</Typography>
               </Box>
             )}
 
@@ -323,19 +420,16 @@ export const CareerReportPage = () => {
                 <Grid item xs={6}>
                   <Box sx={{ height: 40 }} />
                   <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.8125rem' }}>
-                    Prof. K. Soundararajan
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: colors.inkSecondary, display: 'block' }}>
-                    Associate Dean — Industry Relations & Placement
+                    Generated by SkillBridge
                   </Typography>
                 </Grid>
                 <Grid item xs={6} sx={{ textAlign: 'right' }}>
                   <Box sx={{ height: 40 }} />
                   <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.8125rem' }}>
-                    Priya Sundaram
+                    For Personal Planning
                   </Typography>
                   <Typography variant="caption" sx={{ color: colors.inkSecondary, display: 'block' }}>
-                    Assigned Alumni Industry Mentor (Freshworks)
+                    Confirm eligibility and academic records with your placement office.
                   </Typography>
                 </Grid>
               </Grid>

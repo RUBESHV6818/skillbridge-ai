@@ -14,35 +14,38 @@ import {
   TableHead,
   TableRow,
   Chip,
-  IconButton,
   Skeleton,
   Alert,
   InputAdornment,
 } from '@mui/material';
-import {
-  Shield,
-  Search,
-  UserCheck,
-  UserX,
-  Sliders,
-} from 'lucide-react';
+import { Search, RefreshCw } from 'lucide-react';
 import { PageHeader } from '../../components/common/PageHeader';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { colors } from '../../theme/theme';
 import adminService from '../../services/adminService';
+import { useAuth } from '../../context/AuthContext';
 
 export const UserDirectoryPage = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const [toast, setToast] = useState(null);
   const [toggleTarget, setToggleTarget] = useState(null);
+  const [loadError, setLoadError] = useState('');
+  const [pendingUserId, setPendingUserId] = useState(null);
+  const { user: currentUser } = useAuth();
 
   const fetchUsers = async () => {
+    setLoading(true);
+    setLoadError('');
     try {
       const res = await adminService.getUsers();
       setUsers(res.data);
+      setLoadError('');
+    } catch (error) {
+      setLoadError(error.response?.data?.message || 'Could not load the user directory.');
     } finally {
       setLoading(false);
     }
@@ -53,46 +56,62 @@ export const UserDirectoryPage = () => {
   }, []);
 
   const handleRoleChange = async (userId, newRole) => {
+    const priorUser = users.find((item) => item.id === userId);
+    if (!priorUser || priorUser.role === newRole || isSelf(priorUser)) return;
+    setPendingUserId(userId);
     try {
-      await adminService.updateUserRole(userId, newRole);
+      const response = await adminService.updateUserRole(userId, newRole);
+      const savedRole = response.data?.role || newRole;
       setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
+        prev.map((u) => (u.id === userId ? { ...u, role: savedRole } : u))
       );
       setToast({ type: 'success', text: 'User role updated.' });
-    } catch {
-      setToast({ type: 'error', text: 'Failed to update user role.' });
+    } catch (error) {
+      setToast({ type: 'error', text: error.response?.data?.message || 'Failed to update user role.' });
+    } finally {
+      setPendingUserId(null);
     }
   };
 
   const handleStatusToggleConfirm = async () => {
     if (!toggleTarget) return;
+    setPendingUserId(toggleTarget.id);
     try {
-      await adminService.toggleUserStatus(toggleTarget.id);
+      const response = await adminService.toggleUserStatus(toggleTarget.id);
+      const savedStatus = response.data?.status || (toggleTarget.status === 'active' ? 'suspended' : 'active');
       setUsers((prev) =>
         prev.map((u) =>
           u.id === toggleTarget.id
-            ? { ...u, status: u.status === 'active' ? 'suspended' : 'active' }
+            ? { ...u, status: savedStatus }
             : u
         )
       );
       setToast({
         type: 'success',
-        text: `User "${toggleTarget.name}" status changed to ${
-          toggleTarget.status === 'active' ? 'suspended' : 'active'
-        }.`,
+        text: `User "${toggleTarget.name}" is now ${savedStatus}.`,
       });
       setToggleTarget(null);
-    } catch {
-      setToast({ type: 'error', text: 'Status update failed.' });
+    } catch (error) {
+      setToast({ type: 'error', text: error.response?.data?.message || 'Status update failed.' });
+      setToggleTarget(null);
+    } finally {
+      setPendingUserId(null);
     }
   };
 
+  const isSelf = (account) => Boolean(account && (
+    (currentUser?.id && account.id === currentUser.id)
+    || (currentUser?._id && account.id === currentUser._id)
+    || (currentUser?.email && account.email?.toLowerCase() === currentUser.email.toLowerCase())
+  ));
+
+  const activeAdminCount = users.filter((account) => account.role === 'admin' && account.status === 'active').length;
   const filteredUsers = users.filter((u) => {
-    const matchesSearch =
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase());
+    const query = search.trim().toLowerCase();
+    const matchesSearch = [u.name, u.email, u.department].some((value) => String(value || '').toLowerCase().includes(query));
     const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
-    return matchesSearch && matchesRole;
+    const matchesStatus = statusFilter === 'ALL' || u.status === statusFilter;
+    return matchesSearch && matchesRole && matchesStatus;
   });
 
   if (loading) {
@@ -104,12 +123,17 @@ export const UserDirectoryPage = () => {
     );
   }
 
+  if (loadError && !users.length) return <Box><PageHeader title="User Directory & Access Control" subtitle="Manage accounts and platform access." /><Alert severity="error" action={<Button color="inherit" size="small" onClick={fetchUsers}>Try again</Button>}>{loadError}</Alert></Box>;
+
   return (
     <Box>
       <PageHeader
         title="User Directory & Access Control"
         subtitle="Manage student, coordinator, and industry mentor accounts, permissions, and session access."
+        action={<Button variant="outlined" startIcon={<RefreshCw size={16} />} onClick={fetchUsers} disabled={loading || Boolean(pendingUserId)}>Refresh users</Button>}
       />
+
+      {loadError && <Alert severity="error" sx={{ mb: 3 }} action={<Button color="inherit" size="small" onClick={fetchUsers}>Retry</Button>}>{loadError}</Alert>}
 
       {toast && (
         <Alert
@@ -124,7 +148,7 @@ export const UserDirectoryPage = () => {
       {/* Filter and Search Bar */}
       <Card sx={{ p: 2.5, mb: 3, borderRadius: 2 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} sm={6}>
+          <Grid item xs={12} sm={5}>
             <TextField
               fullWidth
               size="small"
@@ -141,7 +165,7 @@ export const UserDirectoryPage = () => {
             />
           </Grid>
 
-          <Grid item xs={12} sm={4}>
+          <Grid item xs={12} sm={3}>
             <TextField
               select
               fullWidth
@@ -150,11 +174,19 @@ export const UserDirectoryPage = () => {
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
             >
-              <MenuItem value="ALL">All Roles (Student, Staff, Mentor, Admin)</MenuItem>
+              <MenuItem value="ALL">All roles</MenuItem>
               <MenuItem value="student">Student</MenuItem>
               <MenuItem value="coordinator">Placement Coordinator</MenuItem>
               <MenuItem value="mentor">Career Mentor</MenuItem>
               <MenuItem value="admin">Administrator</MenuItem>
+            </TextField>
+          </Grid>
+
+          <Grid item xs={12} sm={2}>
+            <TextField select fullWidth size="small" label="Account status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <MenuItem value="ALL">All statuses</MenuItem>
+              <MenuItem value="active">Active</MenuItem>
+              <MenuItem value="suspended">Suspended</MenuItem>
             </TextField>
           </Grid>
 
@@ -173,7 +205,7 @@ export const UserDirectoryPage = () => {
             <TableHead>
               <TableRow>
                 <TableCell>User</TableCell>
-                <TableCell>College / Dept</TableCell>
+                <TableCell>College / Department</TableCell>
                 <TableCell>Access Role</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Registered</TableCell>
@@ -182,7 +214,12 @@ export const UserDirectoryPage = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredUsers.map((u) => (
+              {filteredUsers.length === 0 && <TableRow><TableCell colSpan={7} align="center" sx={{ py: 5, color: colors.inkSecondary }}>No accounts match these filters.</TableCell></TableRow>}
+              {filteredUsers.map((u) => {
+                const self = isSelf(u);
+                const lastActiveAdmin = u.role === 'admin' && u.status === 'active' && activeAdminCount <= 1;
+                const protectedAccount = self || lastActiveAdmin;
+                return (
                 <TableRow key={u.id} hover>
                   <TableCell>
                     <Typography variant="body2" sx={{ fontWeight: 700, color: colors.ink }}>
@@ -191,6 +228,7 @@ export const UserDirectoryPage = () => {
                     <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
                       {u.email}
                     </Typography>
+                    {self && <Chip size="small" label="Your account" sx={{ mt: 0.5, height: 20, fontSize: '0.65rem' }} />}
                   </TableCell>
                   <TableCell sx={{ fontSize: '0.8125rem' }}>{u.department}</TableCell>
                   <TableCell>
@@ -199,6 +237,8 @@ export const UserDirectoryPage = () => {
                       size="small"
                       value={u.role}
                       onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                      disabled={protectedAccount || pendingUserId === u.id}
+                      inputProps={{ 'aria-label': `Access role for ${u.name}` }}
                       sx={{
                         minWidth: 130,
                         '& .MuiOutlinedInput-input': {
@@ -212,6 +252,7 @@ export const UserDirectoryPage = () => {
                       <MenuItem value="mentor">Mentor</MenuItem>
                       <MenuItem value="admin">Admin</MenuItem>
                     </TextField>
+                    {lastActiveAdmin && <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: colors.inkSecondary }}>Last active administrator is protected.</Typography>}
                   </TableCell>
                   <TableCell>
                     <Chip
@@ -238,13 +279,16 @@ export const UserDirectoryPage = () => {
                       variant="outlined"
                       color={u.status === 'active' ? 'secondary' : 'primary'}
                       onClick={() => setToggleTarget(u)}
+                      disabled={protectedAccount || pendingUserId === u.id}
+                      title={self ? 'You cannot change your own account access.' : lastActiveAdmin ? 'The last active administrator is protected.' : undefined}
                       sx={{ fontSize: '0.71875rem', py: 0.3 }}
                     >
                       {u.status === 'active' ? 'Suspend' : 'Reactivate'}
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
@@ -259,6 +303,7 @@ export const UserDirectoryPage = () => {
         isDestructive={toggleTarget?.status === 'active'}
         onConfirm={handleStatusToggleConfirm}
         onClose={() => setToggleTarget(null)}
+        loading={Boolean(pendingUserId && pendingUserId === toggleTarget?.id)}
       />
     </Box>
   );

@@ -88,12 +88,20 @@ export const placementService = {
 
   updateStatus: async (appId, newStatus) => {
     if (USE_MOCK) {
-      mockApplicationsStore = mockApplicationsStore.map((app) =>
-        app.id === appId ? { ...app, status: newStatus } : app
-      );
-      return mockDelay({ success: true, appId, newStatus }, 150);
+      const updated = mockApplicationsStore.find((app) => app.id === appId);
+      if (updated) updated.status = newStatus;
+      return mockDelay(updated, 150);
     }
     return api.patch(`/student/applications/${appId}/status`, { status: newStatus });
+  },
+
+  updateApplication: async (appId, appData) => {
+    if (USE_MOCK) {
+      const updated = { ...mockApplicationsStore.find((app) => app.id === appId), ...appData };
+      mockApplicationsStore = mockApplicationsStore.map((app) => app.id === appId ? updated : app);
+      return mockDelay(updated, 250);
+    }
+    return api.patch(`/student/applications/${appId}`, appData);
   },
 
   addApplication: async (appData) => {
@@ -102,11 +110,11 @@ export const placementService = {
         id: `app_${Date.now()}`,
         company: appData.company,
         role: appData.role,
-        package: appData.package || '₹5.0 LPA',
+        package: appData.package || '',
         status: appData.status || 'applied',
         isCampus: appData.isCampus !== false,
         appliedDate: new Date().toISOString().split('T')[0],
-        location: appData.location || 'Chennai',
+        location: appData.location || '',
         notes: appData.notes || '',
       };
       mockApplicationsStore = [newApp, ...mockApplicationsStore];

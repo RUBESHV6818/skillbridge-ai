@@ -121,7 +121,7 @@ export const jdService = {
         350
       );
     }
-    return api.post('/jd/match', { text: jdTextOrUrl, resumeId });
+    return api.post('/jd/match', { text: jdTextOrUrl, resumeId }, { timeout: 80000 });
   },
 };
 

@@ -9,7 +9,8 @@ let mockResumesStore = [
     uploadedAt: '3 days ago',
     lastAnalysed: 'Yesterday at 4:15 PM',
     isPrimary: true,
-    atsScore: 72,
+    resumeReviewScore: 72,
+    resumeReviewTargetRole: 'Full Stack Engineer',
     targetRole: 'Full Stack Engineer',
     matchedKeywordsCount: 22,
     missingKeywordsCount: 8,
@@ -22,7 +23,8 @@ let mockResumesStore = [
     uploadedAt: '1 week ago',
     lastAnalysed: 'Oct 14, 2025',
     isPrimary: false,
-    atsScore: 78,
+    resumeReviewScore: 78,
+    resumeReviewTargetRole: 'Frontend Specialist (React)',
     targetRole: 'Frontend Specialist (React)',
     matchedKeywordsCount: 26,
     missingKeywordsCount: 4,
@@ -35,7 +37,8 @@ let mockResumesStore = [
     uploadedAt: '2 weeks ago',
     lastAnalysed: 'Oct 07, 2025',
     isPrimary: false,
-    atsScore: 64,
+    resumeReviewScore: 64,
+    resumeReviewTargetRole: 'Software Engineer (General)',
     targetRole: 'Software Engineer (General)',
     matchedKeywordsCount: 17,
     missingKeywordsCount: 14,
@@ -137,10 +140,10 @@ export const resumeService = {
 
   uploadResume: async (file) => {
     // Validate file type
-    const validExtensions = ['pdf', 'docx', 'doc'];
+    const validExtensions = ['pdf', 'docx'];
     const extension = file.name.split('.').pop().toLowerCase();
     if (!validExtensions.includes(extension)) {
-      throw new Error('Only PDF and DOCX documents are accepted for ATS parsing.');
+      throw new Error('Only PDF and DOCX documents are supported.');
     }
 
     // Validate size: 5MB
@@ -155,9 +158,9 @@ export const resumeService = {
         fileSize: `${(file.size / 1024).toFixed(0)} KB`,
         fileType: file.type || 'application/pdf',
         uploadedAt: 'Just now',
-        lastAnalysed: 'Analysis in progress',
+        lastAnalysed: null,
         isPrimary: mockResumesStore.length === 0, // First uploaded becomes primary
-        atsScore: 75,
+        resumeReviewScore: null,
         targetRole: 'Engineering Candidate',
         matchedKeywordsCount: 20,
         missingKeywordsCount: 6,
@@ -192,11 +195,11 @@ export const resumeService = {
     return api.delete(`/resumes/${resumeId}`);
   },
 
-  getIntelligence: async (resumeId = 'res_01') => {
+  getIntelligence: async (resumeId) => {
     if (USE_MOCK) {
-      return mockDelay({ ...mockIntelligenceData, resumeId }, 350);
+      return mockDelay({ ...mockIntelligenceData, resumeId: resumeId || mockIntelligenceData.resumeId }, 350);
     }
-    return api.get(`/resumes/${resumeId}/intelligence`);
+    return api.get(resumeId ? `/resumes/${resumeId}/intelligence` : '/resumes/intelligence');
   },
 };
 

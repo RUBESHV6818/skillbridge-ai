@@ -5,10 +5,12 @@ import {
   Card,
   Typography,
   Button,
+  TextField,
   Chip,
   Skeleton,
   LinearProgress,
   Tooltip,
+  Alert,
 } from '@mui/material';
 import {
   BarChart3,
@@ -25,10 +27,23 @@ import { PageHeader } from '../../components/common/PageHeader';
 import { SkillChip } from '../../components/common/SkillChip';
 import { colors } from '../../theme/theme';
 import skillGapService from '../../services/skillGapService';
+import authService from '../../services/authService';
+import { useAuth } from '../../context/AuthContext';
+
+function analysisErrorMessage(error) {
+  if (error.code === 'ECONNABORTED') return 'The AI analysis is taking longer than expected. Please wait a moment, then try again.';
+  if (!error.response) return 'Could not reach the backend at localhost:5001. Check that the backend is running.';
+  if (error.response.data?.message) return error.response.data.message;
+  return 'Could not load your AI role analysis. Please try again.';
+}
 
 export const SkillGapPage = () => {
+  const { user, updateUser } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reanalyzing, setReanalyzing] = useState(false);
+  const [targetRole, setTargetRole] = useState(user?.targetRole || '');
 
   useEffect(() => {
     let isMounted = true;
@@ -37,23 +52,95 @@ export const SkillGapPage = () => {
         setData(res.data);
         setLoading(false);
       }
+    }).catch((err) => {
+      if (isMounted) {
+        setError(err.response?.status === 404
+          ? 'Upload a resume first to analyze it for your target role.'
+          : analysisErrorMessage(err));
+        setLoading(false);
+      }
     });
     return () => {
       isMounted = false;
     };
   }, []);
 
+  const rerunAnalysis = async () => {
+    setReanalyzing(true);
+    try {
+      const response = await skillGapService.getAnalysis(true);
+      setData(response.data);
+      setError('');
+    } catch (err) {
+      setError(analysisErrorMessage(err));
+    } finally {
+      setReanalyzing(false);
+    }
+  };
+
+  const saveRoleAndAnalyze = async (event) => {
+    event.preventDefault();
+    const role = targetRole.trim();
+    if (!role) return;
+    setReanalyzing(true);
+    setError('');
+    try {
+      const { data: profile } = await authService.getProfile();
+      const { data: savedProfile } = await authService.updateProfile({
+        ...profile,
+        targetRole: role,
+        targetRoleConfirmed: true,
+        batchYear: profile.batchYear ?? null,
+        cgpa: profile.cgpa ?? null,
+      });
+      updateUser(savedProfile);
+      setTargetRole(savedProfile.targetRole);
+      const response = await skillGapService.getAnalysis(true);
+      setData(response.data);
+    } catch (err) {
+      setError(analysisErrorMessage(err));
+    } finally {
+      setReanalyzing(false);
+    }
+  };
+
+  const renderRoleForm = () => (
+    <Card component="form" onSubmit={saveRoleAndAnalyze} sx={{ p: { xs: 2.5, sm: 3 }, mb: 3, borderRadius: 2 }}>
+      <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '1.05rem', color: colors.ink, mb: 0.75 }}>
+        Analyze your resume for a role
+      </Typography>
+      <Typography variant="body2" sx={{ color: colors.inkSecondary, mb: 2 }}>
+        Enter any role title. AI will build a relevant skill profile from the role and compare it with your uploaded resume.
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' } }}>
+        <TextField
+          fullWidth
+          size="small"
+          label="Target role"
+          placeholder="e.g. Machine Learning Engineer"
+          value={targetRole}
+          onChange={(event) => setTargetRole(event.target.value)}
+          inputProps={{ maxLength: 120 }}
+          required
+        />
+        <Button type="submit" variant="contained" disabled={reanalyzing || !targetRole.trim()} startIcon={<Sparkles size={15} />} sx={{ whiteSpace: 'nowrap' }}>
+          {reanalyzing ? 'Analyzing...' : 'Analyze with AI'}
+        </Button>
+      </Box>
+    </Card>
+  );
+
   const getPriorityBadge = (priority) => {
     switch (priority) {
       case 'high':
         return (
           <Chip
-            label="High Priority"
+            label="Target Role Focus"
             size="small"
             sx={{
-              backgroundColor: colors.errorBg,
-              color: colors.error,
-              border: `1px solid ${colors.errorBorder}`,
+              backgroundColor: colors.accentLight,
+              color: colors.accent,
+              border: `1px solid ${colors.accentBorder}`,
               fontWeight: 700,
               fontSize: '0.6875rem',
               height: 20,
@@ -63,7 +150,7 @@ export const SkillGapPage = () => {
       case 'medium':
         return (
           <Chip
-            label="Medium Priority"
+            label="Supporting Skill"
             size="small"
             sx={{
               backgroundColor: colors.warningBg,
@@ -78,7 +165,7 @@ export const SkillGapPage = () => {
       default:
         return (
           <Chip
-            label="Optional"
+            label="Lower Role Focus"
             size="small"
             sx={{
               backgroundColor: colors.surfaceSubtle,
@@ -95,9 +182,61 @@ export const SkillGapPage = () => {
   if (loading) {
     return (
       <Box>
-        <PageHeader title="Skill Gap Analyzer" subtitle="Evaluating technical competence against campus placement benchmarks..." />
+        <PageHeader title="Skill Gap Analyzer" subtitle="AI is reviewing your extracted resume against your selected role..." />
         <Skeleton variant="rounded" height={240} sx={{ mb: 3, borderRadius: 2 }} />
         <Skeleton variant="rounded" height={360} sx={{ borderRadius: 2 }} />
+      </Box>
+    );
+  }
+
+  if (error) {
+    const canRetryAI = /temporarily overloaded|taking longer than expected|timed out/i.test(error);
+    return (
+      <Box>
+        <PageHeader title="Skill Gap Analyzer" subtitle="AI analysis of your resume against your selected target role." />
+        <Alert
+          severity={error.includes('API_KEY') ? 'warning' : 'info'}
+          action={error.includes('API_KEY') ? null : canRetryAI ? (
+            <Button onClick={rerunAnalysis} disabled={reanalyzing} color="inherit" size="small">
+              {reanalyzing ? 'Retrying...' : 'Retry with AI'}
+            </Button>
+          ) : (
+            <Button component={RouterLink} to="/resumes" color="inherit" size="small">Manage resumes</Button>
+          )}
+        >
+          {error}
+        </Alert>
+      </Box>
+    );
+  }
+
+  // A retry can temporarily have no report data. Keep the page recoverable
+  // instead of reading `analysisAvailable` from null and crashing the app.
+  if (!data) {
+    return (
+      <Box>
+        <PageHeader title="Skill Gap Analyzer" subtitle="AI analysis of your resume against your selected target role." />
+        <Alert severity={reanalyzing ? 'info' : 'warning'}>
+          {reanalyzing ? 'AI is analyzing your resume. This may take a moment.' : 'No analysis data is available yet. Retry the AI analysis.'}
+        </Alert>
+        {!reanalyzing && (
+          <Button onClick={rerunAnalysis} variant="outlined" startIcon={<Sparkles size={15} />} sx={{ mt: 2 }}>
+            Retry with AI
+          </Button>
+        )}
+      </Box>
+    );
+  }
+
+  if (!data.analysisAvailable) {
+    return (
+      <Box>
+        <PageHeader
+          title="Skill Gap Analyzer"
+          subtitle="Enter your role here to run an AI analysis against your uploaded resume."
+        />
+        {renderRoleForm()}
+        <Alert severity="info">{data.message}</Alert>
       </Box>
     );
   }
@@ -106,39 +245,59 @@ export const SkillGapPage = () => {
     <Box>
       <PageHeader
         title="Skill Gap Analyzer"
-        subtitle={`Diagnosing proficiency gaps for ${data.targetProfile}. Prioritized by campus recruiter shortlisting frequency.`}
-        action={
-          <Button
-            component={RouterLink}
-            to="/learning-roadmap"
-            variant="contained"
-            endIcon={<Milestone size={15} />}
-            sx={{ fontSize: '0.8125rem' }}
-          >
-            Open 6-Week Roadmap
-          </Button>
-        }
+        subtitle={`${data.analysisProvider} reviewed the extracted resume text for ${data.targetProfile}. A resume mention is evidence to inspect, not proof of proficiency.`}
+        action={(
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Button onClick={rerunAnalysis} disabled={reanalyzing} variant="outlined" startIcon={<Sparkles size={15} />} sx={{ fontSize: '0.8125rem' }}>
+              {reanalyzing ? 'Analyzing...' : 'Reanalyze with AI'}
+            </Button>
+            <Button component={RouterLink} to="/learning-roadmap" variant="contained" endIcon={<Milestone size={15} />} sx={{ fontSize: '0.8125rem' }}>
+              Open 6-Week Roadmap
+            </Button>
+          </Box>
+        )}
       />
 
-      {/* Row 1: Horizontal Category Benchmark Bars */}
+      {renderRoleForm()}
+
+      <Alert severity="info" icon={<Sparkles size={18} />} sx={{ mb: 3, borderRadius: 1.5 }}>
+        <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
+          {data.scoreLabel}: {data.resumeSkillCoverage}/100
+        </Typography>
+        <Typography variant="body2">{data.summary}</Typography>
+        {data.scoreExplanation && <Typography variant="caption" sx={{ display: 'block', mt: 0.75 }}>{data.scoreExplanation}</Typography>}
+        <Typography variant="caption" sx={{ display: 'block', mt: 0.75, opacity: 0.85 }}>
+          Powered by {data.analysisProvider} ({data.analysisModel}){data.cached ? ' · saved analysis' : ' · newly analyzed'} · {data.limitations}
+        </Typography>
+        <Typography variant="caption" sx={{ display: 'block', mt: 0.5, opacity: 0.85 }}>
+          The extracted resume text is sent to {data.analysisProvider} to produce this report.
+        </Typography>
+      </Alert>
+
+      {data.strengths?.length > 0 && (
+        <Card sx={{ p: { xs: 2.5, sm: 3 }, mb: 3, borderRadius: 2 }}>
+          <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '1.05rem', color: colors.ink, mb: 1.5 }}>Role-relevant strengths found</Typography>
+          <Box component="ul" sx={{ m: 0, pl: 2.5, color: colors.inkSecondary }}>
+            {data.strengths.map((strength, index) => <li key={index}><Typography variant="body2">{strength}</Typography></li>)}
+          </Box>
+        </Card>
+      )}
+
+      {/* AI-assessed role alignment by skill category */}
       <Card sx={{ p: { xs: 2.5, sm: 3 }, mb: 3.5, borderRadius: 2 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Box>
             <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '1.1rem', color: colors.ink }}>
-              Technical Domain Proficiency vs. Campus Recruiter Benchmark
+              AI Role Alignment by Category
             </Typography>
             <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-              Horizontal bar analysis comparing your verified skills against minimum thresholds for ₹6 - 8 LPA roles
+              {data.analysisProvider} builds skill categories for your selected role and compares them with evidence in your extracted resume.
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <Box sx={{ width: 10, height: 10, borderRadius: 1, backgroundColor: colors.accent }} />
-              <Typography variant="caption" sx={{ color: colors.inkSecondary }}>Your Score</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Box sx={{ width: 10, height: 10, borderRadius: 1, backgroundColor: colors.border }} />
-              <Typography variant="caption" sx={{ color: colors.inkSecondary }}>Benchmark</Typography>
+              <Typography variant="caption" sx={{ color: colors.inkSecondary }}>Evidence matched</Typography>
             </Box>
           </Box>
         </Box>
@@ -152,38 +311,8 @@ export const SkillGapPage = () => {
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                   <Typography variant="caption" sx={{ fontWeight: 700, color: colors.accent, fontVariantNumeric: 'tabular-nums' }}>
-                    You: {bar.current}%
+                    {bar.detectedCount} of {bar.totalSkills} areas evidenced ({bar.current}%)
                   </Typography>
-                  <Typography variant="caption" sx={{ color: colors.inkSecondary, fontVariantNumeric: 'tabular-nums' }}>
-                    Recruiter target: {bar.required}%
-                  </Typography>
-                  {bar.gap > 0 ? (
-                    <Chip
-                      label={`Deficit: -${bar.gap}%`}
-                      size="small"
-                      sx={{
-                        height: 20,
-                        fontSize: '0.6875rem',
-                        fontWeight: 600,
-                        backgroundColor: colors.errorBg,
-                        color: colors.error,
-                        border: `1px solid ${colors.errorBorder}`,
-                      }}
-                    />
-                  ) : (
-                    <Chip
-                      label="Above threshold"
-                      size="small"
-                      sx={{
-                        height: 20,
-                        fontSize: '0.6875rem',
-                        fontWeight: 600,
-                        backgroundColor: colors.successBg,
-                        color: colors.success,
-                        border: `1px solid ${colors.successBorder}`,
-                      }}
-                    />
-                  )}
                 </Box>
               </Box>
 
@@ -196,7 +325,7 @@ export const SkillGapPage = () => {
                     top: 0,
                     height: '100%',
                     width: `${bar.current}%`,
-                    backgroundColor: bar.gap > 0 ? (bar.gap > 20 ? colors.error : colors.warning) : colors.accent,
+                    backgroundColor: colors.accent,
                     borderRadius: 4,
                     transition: 'width 300ms ease',
                   }}
@@ -216,16 +345,17 @@ export const SkillGapPage = () => {
             </Typography>
 
             <Grid container spacing={3}>
-              {/* Left Column: Verified Skills You Have */}
+              {/* Left Column: Terms detected in resume text */}
               <Grid item xs={12} md={5}>
                 <Box sx={{ p: 2, borderRadius: 1.5, backgroundColor: colors.surfaceSubtle, border: `1px solid ${colors.borderLight}`, height: '100%' }}>
                   <Typography variant="caption" sx={{ color: colors.success, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block', mb: 1.5 }}>
-                    Verified on your resume
+                    Evidence found in resume
                   </Typography>
 
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                     {cat.have.map((item, hIdx) => (
-                      <Box key={hIdx} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1, borderRadius: 1, backgroundColor: colors.surface, border: `1px solid ${colors.borderLight}` }}>
+                      <React.Fragment key={hIdx}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1, borderRadius: 1, backgroundColor: colors.surface, border: `1px solid ${colors.borderLight}` }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <CheckCircle2 size={15} color={colors.success} strokeWidth={2.2} />
                           <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.8125rem', color: colors.ink }}>
@@ -233,7 +363,7 @@ export const SkillGapPage = () => {
                           </Typography>
                         </Box>
                         <Chip
-                          label={item.proficiency}
+                            label="Mentioned"
                           size="small"
                           sx={{
                             height: 18,
@@ -244,6 +374,12 @@ export const SkillGapPage = () => {
                           }}
                         />
                       </Box>
+                      {item.evidence && (
+                        <Typography variant="caption" sx={{ display: 'block', ml: 3.25, mt: -0.5, mb: 0.5, color: colors.inkSecondary }}>
+                          “{item.evidence}”
+                        </Typography>
+                      )}
+                      </React.Fragment>
                     ))}
                   </Box>
                 </Box>
@@ -253,7 +389,7 @@ export const SkillGapPage = () => {
               <Grid item xs={12} md={7}>
                 <Box sx={{ p: 2, borderRadius: 1.5, border: `1px solid ${colors.borderLight}`, height: '100%' }}>
                   <Typography variant="caption" sx={{ color: colors.warning, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block', mb: 1.5 }}>
-                    Identified gaps to acquire
+                    Relevant role skills not evidenced in resume
                   </Typography>
 
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -263,13 +399,13 @@ export const SkillGapPage = () => {
                         sx={{
                           p: 1.5,
                           borderRadius: 1.5,
-                          border: `1px solid ${item.priority === 'high' ? colors.errorBorder : colors.borderLight}`,
-                          backgroundColor: item.priority === 'high' ? colors.errorBg : colors.surfaceSubtle,
+                          border: `1px solid ${item.priority === 'high' ? colors.accentBorder : colors.borderLight}`,
+                          backgroundColor: item.priority === 'high' ? colors.accentLight : colors.surfaceSubtle,
                         }}
                       >
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <AlertTriangle size={15} color={item.priority === 'high' ? colors.error : colors.warning} />
+                            <AlertTriangle size={15} color={item.priority === 'high' ? colors.accent : item.priority === 'medium' ? colors.warning : colors.inkTertiary} />
                             <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.84375rem', color: colors.ink }}>
                               {item.name}
                             </Typography>
@@ -283,7 +419,7 @@ export const SkillGapPage = () => {
 
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pt: 0.75, borderTop: `1px solid ${colors.borderLight}` }}>
                           <Typography variant="caption" sx={{ color: colors.ink, fontWeight: 500 }}>
-                            Resource: {item.actionableResource}
+                            Suggested next step: {item.actionableResource}
                           </Typography>
                           <Button
                             component={RouterLink}

@@ -2,9 +2,9 @@ import api, { USE_MOCK, mockDelay } from './api';
 
 let mockUsersStore = [
   {
-    id: 'u_01',
+    id: 'usr_stu_001',
     name: 'Aarthi Raman',
-    email: 'aarthi.raman@cit.edu.in',
+    email: 'aarthi.raman@student.demo.skillbridge.local',
     role: 'student',
     status: 'active',
     department: 'CSE',
@@ -12,9 +12,9 @@ let mockUsersStore = [
     lastLogin: '10 mins ago',
   },
   {
-    id: 'u_02',
+    id: 'usr_coord_001',
     name: 'Prof. K. Soundararajan',
-    email: 'placement.cell@cit.edu.in',
+    email: 'placement.cell@coordinator.demo.skillbridge.local',
     role: 'coordinator',
     status: 'active',
     department: 'Training & Placement Directorate',
@@ -22,9 +22,9 @@ let mockUsersStore = [
     lastLogin: '1 hour ago',
   },
   {
-    id: 'u_03',
+    id: 'usr_mentor_001',
     name: 'Priya Sundaram',
-    email: 'priya.sundaram@alumni.cit.edu.in',
+    email: 'priya.sundaram@mentor.demo.skillbridge.local',
     role: 'mentor',
     status: 'active',
     department: 'Freshworks (Alumni Mentor)',
@@ -52,9 +52,9 @@ let mockUsersStore = [
     lastLogin: 'Yesterday',
   },
   {
-    id: 'u_06',
+    id: 'usr_adm_001',
     name: 'Rajeshwaran S',
-    email: 'admin@skillbridge.edu.in',
+    email: 'admin@admin.demo.skillbridge.local',
     role: 'admin',
     status: 'active',
     department: 'Platform Operations',
@@ -66,7 +66,9 @@ let mockUsersStore = [
 let mockPlatformSettings = {
   institutionName: 'Chennai Institute of Technology',
   placementSeasonYear: '2025–2026',
-  aiProvider: 'Google Gemini 1.5 Flash (Latency: 240ms • Connected)',
+  aiProvider: 'Configured AI provider',
+  aiModel: 'gemini-3.6-flash',
+  emailDelivery: { mode: 'console', state: 'development' },
   atsWeights: {
     resumeFormatting: 25,
     keywordDensity: 35,

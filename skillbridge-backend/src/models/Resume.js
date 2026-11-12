@@ -17,6 +17,9 @@ const resumeSchema = new Schema({
   matchedKeywordsCount: { type: Number, default: 0 },
   missingKeywordsCount: { type: Number, default: 0 },
   extractedTextLength: { type: Number, default: 0 },
+  extractedText: { type: String, default: '' }, // raw extracted résumé text
+  aiRoleAnalysis: { type: Schema.Types.Mixed, default: null },
+  aiResumeIntelligence: { type: Schema.Types.Mixed, default: null },
 });
 
 // Helper to format dates similar to frontend mock
@@ -39,7 +42,10 @@ resumeSchema.methods.toResponseJSON = function () {
     uploadedAt: formatDate(this.uploadedAt),
     lastAnalysed: this.lastAnalysed ? formatDate(this.lastAnalysed) : null,
     isPrimary: this.isPrimary,
-    atsScore: this.atsScore,
+    resumeReviewScore: Number.isFinite(this.aiResumeIntelligence?.result?.overallScore)
+      ? this.aiResumeIntelligence.result.overallScore
+      : null,
+    resumeReviewTargetRole: this.aiResumeIntelligence?.result?.targetRole || '',
     targetRole: this.targetRole,
     matchedKeywordsCount: this.matchedKeywordsCount,
     missingKeywordsCount: this.missingKeywordsCount,

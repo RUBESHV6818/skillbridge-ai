@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import {
   Box,
@@ -21,6 +21,7 @@ import {
   useMediaQuery,
   useTheme,
   InputBase,
+  Badge,
 } from '@mui/material';
 import {
   LayoutDashboard,
@@ -48,6 +49,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/theme';
+import notificationService from '../services/notificationService';
+import mentorService from '../services/mentorService';
 
 const DRAWER_WIDTH = 256;
 const COLLAPSED_DRAWER_WIDTH = 72;
@@ -62,6 +65,34 @@ export const AppLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [profileAnchor, setProfileAnchor] = useState(null);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [pendingMentorReviews, setPendingMentorReviews] = useState(0);
+  const [roleSwitchError, setRoleSwitchError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    const refreshUnread = () => notificationService.getNotifications()
+      .then(({ data }) => { if (active) setUnreadNotifications(data.unreadCount || 0); })
+      .catch(() => { if (active) setUnreadNotifications(0); });
+    refreshUnread();
+    window.addEventListener('skillbridge:notifications-updated', refreshUnread);
+    return () => {
+      active = false;
+      window.removeEventListener('skillbridge:notifications-updated', refreshUnread);
+    };
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (role !== 'mentor') {
+      setPendingMentorReviews(0);
+      return undefined;
+    }
+    let active = true;
+    mentorService.getReviewQueue()
+      .then(({ data }) => { if (active) setPendingMentorReviews(data.filter((review) => review.status === 'pending').length); })
+      .catch(() => { if (active) setPendingMentorReviews(0); });
+    return () => { active = false; };
+  }, [role, location.pathname]);
 
   const handleDrawerToggle = () => {
     if (isMobile) {
@@ -100,7 +131,7 @@ export const AppLayout = () => {
 
   const mentorNav = [
     { label: 'Assigned Mentees', path: '/mentor/students', icon: Users },
-    { label: 'Review Queue', path: '/mentor/reviews', icon: FileText, badge: '3' },
+    { label: 'Review Queue', path: '/mentor/reviews', icon: FileText, badge: pendingMentorReviews ? String(pendingMentorReviews) : undefined },
   ];
 
   const adminNav = [
@@ -482,7 +513,9 @@ export const AppLayout = () => {
                   p: 0.75,
                 }}
               >
-                <Bell size={17} />
+                <Badge badgeContent={unreadNotifications} color="error" max={99}>
+                  <Bell size={17} />
+                </Badge>
               </IconButton>
             </Tooltip>
 
@@ -635,12 +668,18 @@ export const AppLayout = () => {
             return (
               <Box
                 key={r.id}
-                onClick={() => {
-                  switchRoleDev(r.id);
-                  if (r.id === 'student') navigate('/dashboard');
-                  else if (r.id === 'coordinator') navigate('/coordinator/cohort');
-                  else if (r.id === 'mentor') navigate('/mentor/students');
-                  else if (r.id === 'admin') navigate('/admin/users');
+                onClick={async () => {
+                  if (isCurrent) return;
+                  setRoleSwitchError('');
+                  try {
+                    await switchRoleDev(r.id);
+                    if (r.id === 'student') navigate('/dashboard');
+                    else if (r.id === 'coordinator') navigate('/coordinator/cohort');
+                    else if (r.id === 'mentor') navigate('/mentor/students');
+                    else if (r.id === 'admin') navigate('/admin/users');
+                  } catch (error) {
+                    setRoleSwitchError(error.response?.data?.message || 'Could not switch demo account. Check that the backend is running.');
+                  }
                 }}
                 sx={{
                   cursor: 'pointer',
@@ -662,6 +701,7 @@ export const AppLayout = () => {
               </Box>
             );
           })}
+          {roleSwitchError && <Typography variant="caption" sx={{ color: '#FFC4C4', maxWidth: 220 }}>{roleSwitchError}</Typography>}
         </Box>
       </Box>
     </Box>

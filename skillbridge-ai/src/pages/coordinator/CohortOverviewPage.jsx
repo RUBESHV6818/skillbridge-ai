@@ -21,6 +21,7 @@ import {
   DialogActions,
   Skeleton,
   InputAdornment,
+  Alert,
 } from '@mui/material';
 import {
   Users,
@@ -44,6 +45,11 @@ export const CohortOverviewPage = () => {
   const [departmentFilter, setDepartmentFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [loadError, setLoadError] = useState('');
+  const [mentors, setMentors] = useState([]);
+  const [mentorChoice, setMentorChoice] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [assignmentMessage, setAssignmentMessage] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -52,16 +58,39 @@ export const CohortOverviewPage = () => {
         setStudents(res.data);
         setLoading(false);
       }
+    }).catch((error) => {
+      if (isMounted) {
+        setLoadError(error.response?.data?.message || 'Could not load the cohort. Please try again.');
+        setLoading(false);
+      }
     });
     return () => {
       isMounted = false;
     };
   }, []);
 
+  useEffect(() => {
+    coordinatorService.getMentors().then((res) => setMentors(res.data)).catch(() => setMentors([]));
+  }, []);
+
+  const saveMentorAssignment = async () => {
+    if (!selectedStudent) return;
+    setAssigning(true);
+    setAssignmentMessage('');
+    try {
+      const { data } = await coordinatorService.assignMentor(selectedStudent.id, mentorChoice);
+      setStudents((current) => current.map((student) => student.id === data.id ? { ...student, mentor: data.mentor, mentorId: data.mentorId } : student));
+      setSelectedStudent((current) => current ? { ...current, mentor: data.mentor, mentorId: data.mentorId } : current);
+      setAssignmentMessage('Mentor assignment saved.');
+    } catch (error) {
+      setAssignmentMessage(error.response?.data?.message || 'Could not save mentor assignment.');
+    } finally { setAssigning(false); }
+  };
+
   const filteredStudents = students.filter((s) => {
     const matchesSearch =
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.rollNo.includes(searchQuery);
+      (s.rollNo || '').includes(searchQuery) || (s.email || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDept = departmentFilter === 'ALL' || s.department === departmentFilter;
     const matchesStatus = statusFilter === 'ALL' || s.status === statusFilter;
     return matchesSearch && matchesDept && matchesStatus;
@@ -129,17 +158,19 @@ export const CohortOverviewPage = () => {
   if (loading) {
     return (
       <Box>
-        <PageHeader title="Placement Cohort Directory" subtitle="Loading 2025 engineering batch records..." />
+        <PageHeader title="Placement Cohort Directory" subtitle="Loading verified student records..." />
         <Skeleton variant="rounded" height={420} sx={{ borderRadius: 2 }} />
       </Box>
     );
   }
 
+  if (loadError) return <Box><PageHeader title="Placement Cohort Directory" subtitle="Student readiness information from verified accounts." /><Alert severity="error">{loadError}</Alert></Box>;
+
   return (
     <Box>
       <PageHeader
         title="Placement Cohort Directory"
-        subtitle="Department-wide student placement readiness monitoring for the 2025 graduating engineering batch."
+        subtitle="Resume and interview signals with application stages recorded by verified student accounts."
       />
 
       {/* Filter and Search Bar */}
@@ -208,11 +239,11 @@ export const CohortOverviewPage = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Student & Roll No</TableCell>
+                <TableCell>Student & Email</TableCell>
                 <TableCell>Branch</TableCell>
                 <TableCell>CGPA</TableCell>
-                <TableCell>Readiness Index</TableCell>
-                <TableCell>ATS Resume</TableCell>
+                <TableCell>Available Practice Signal</TableCell>
+                <TableCell>AI Resume Review</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Last Active</TableCell>
                 <TableCell align="right">Diagnostic</TableCell>
@@ -226,7 +257,7 @@ export const CohortOverviewPage = () => {
                       {s.name}
                     </Typography>
                     <Typography variant="caption" sx={{ color: colors.inkSecondary, fontVariantNumeric: 'tabular-nums' }}>
-                      {s.rollNo}
+                      {s.email || 'Email unavailable'}
                     </Typography>
                   </TableCell>
                   <TableCell>
@@ -240,15 +271,15 @@ export const CohortOverviewPage = () => {
                       variant="body2"
                       sx={{
                         fontWeight: 700,
-                        color: s.readinessScore >= 75 ? colors.success : s.readinessScore >= 65 ? colors.accent : colors.error,
+                        color: s.readinessScore == null ? colors.inkSecondary : s.readinessScore >= 75 ? colors.success : s.readinessScore >= 65 ? colors.accent : colors.error,
                         fontVariantNumeric: 'tabular-nums',
                       }}
                     >
-                      {s.readinessScore}/100
+                      {s.readinessScore ?? '—'}/100
                     </Typography>
                   </TableCell>
                   <TableCell sx={{ fontVariantNumeric: 'tabular-nums', color: colors.inkSecondary }}>
-                    {s.atsScore}%
+                    {s.resumeReviewScore == null ? '—' : `${s.resumeReviewScore}%`}
                   </TableCell>
                   <TableCell>{getStatusChip(s.status)}</TableCell>
                   <TableCell sx={{ fontSize: '0.75rem', color: colors.inkSecondary }}>
@@ -259,7 +290,7 @@ export const CohortOverviewPage = () => {
                       size="small"
                       variant="outlined"
                       startIcon={<Eye size={13} />}
-                      onClick={() => setSelectedStudent(s)}
+                      onClick={() => { setSelectedStudent(s); setMentorChoice(s.mentorId || ''); setAssignmentMessage(''); }}
                       sx={{ fontSize: '0.71875rem', py: 0.3 }}
                     >
                       Audit
@@ -267,6 +298,7 @@ export const CohortOverviewPage = () => {
                   </TableCell>
                 </TableRow>
               ))}
+              {!filteredStudents.length && <TableRow><TableCell colSpan={8} align="center" sx={{ py: 4, color: colors.inkSecondary }}>No students match these filters.</TableCell></TableRow>}
             </TableBody>
           </Table>
         </TableContainer>
@@ -275,7 +307,7 @@ export const CohortOverviewPage = () => {
       {/* Student Audit Modal Dialog */}
       <Dialog
         open={Boolean(selectedStudent)}
-        onClose={() => setSelectedStudent(null)}
+        onClose={() => { setSelectedStudent(null); setAssignmentMessage(''); }}
         maxWidth="sm"
         fullWidth
         PaperProps={{ sx: { borderRadius: 2 } }}
@@ -292,7 +324,7 @@ export const CohortOverviewPage = () => {
                     {selectedStudent.name}
                   </Typography>
                   <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                    {selectedStudent.rollNo} • {selectedStudent.department} • CGPA: {selectedStudent.cgpa}
+                    {selectedStudent.email} • {selectedStudent.department} • CGPA: {selectedStudent.cgpa}
                   </Typography>
                 </Box>
                 {getStatusChip(selectedStudent.status)}
@@ -302,30 +334,30 @@ export const CohortOverviewPage = () => {
                 <Grid item xs={4}>
                   <Box sx={{ p: 1.5, textAlign: 'center', borderRadius: 1.5, border: `1px solid ${colors.borderLight}` }}>
                     <Typography variant="h4" sx={{ fontWeight: 700, color: colors.accent, fontVariantNumeric: 'tabular-nums' }}>
-                      {selectedStudent.readinessScore}
+                      {selectedStudent.readinessScore ?? '—'}
                     </Typography>
                     <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                      Composite Score
+                      Available Score
                     </Typography>
                   </Box>
                 </Grid>
                 <Grid item xs={4}>
                   <Box sx={{ p: 1.5, textAlign: 'center', borderRadius: 1.5, border: `1px solid ${colors.borderLight}` }}>
                     <Typography variant="h4" sx={{ fontWeight: 700, color: colors.success, fontVariantNumeric: 'tabular-nums' }}>
-                      {selectedStudent.atsScore}
+                      {selectedStudent.resumeReviewScore ?? '—'}
                     </Typography>
                     <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                      ATS Resume
+                      AI Resume Review
                     </Typography>
                   </Box>
                 </Grid>
                 <Grid item xs={4}>
                   <Box sx={{ p: 1.5, textAlign: 'center', borderRadius: 1.5, border: `1px solid ${colors.borderLight}` }}>
                     <Typography variant="h4" sx={{ fontWeight: 700, color: colors.warning, fontVariantNumeric: 'tabular-nums' }}>
-                      {selectedStudent.interviewScore}
+                      {selectedStudent.interviewScore ?? '—'}
                     </Typography>
                     <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                      Mock Interview
+                      Written Practice
                     </Typography>
                   </Box>
                 </Grid>
@@ -339,14 +371,22 @@ export const CohortOverviewPage = () => {
                   {selectedStudent.activeApplication}
                 </Typography>
                 <Typography variant="caption" sx={{ color: colors.inkSecondary, display: 'block', mt: 0.75 }}>
-                  Assigned Alumni Mentor: {selectedStudent.mentor}
+                  Mentor assignment: {selectedStudent.mentor}
                 </Typography>
+                <Box sx={{ display: 'flex', gap: 1, mt: 1.5, alignItems: 'center' }}>
+                  <TextField select size="small" fullWidth label="Assign mentor" value={mentorChoice} onChange={(event) => setMentorChoice(event.target.value)}>
+                    <MenuItem value="">Unassigned</MenuItem>
+                    {mentors.map((mentor) => <MenuItem key={mentor.id} value={mentor.id}>{mentor.name} ({mentor.email})</MenuItem>)}
+                  </TextField>
+                  <Button variant="outlined" disabled={assigning || !mentors.length && Boolean(mentorChoice)} onClick={saveMentorAssignment}>{assigning ? 'Saving…' : 'Save'}</Button>
+                </Box>
+                {assignmentMessage && <Alert severity={assignmentMessage.includes('Could not') ? 'error' : 'success'} sx={{ mt: 1 }}>{assignmentMessage}</Alert>}
               </Box>
             </Box>
           )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button variant="outlined" onClick={() => setSelectedStudent(null)}>
+          <Button variant="outlined" onClick={() => { setSelectedStudent(null); setAssignmentMessage(''); }}>
             Close
           </Button>
         </DialogActions>

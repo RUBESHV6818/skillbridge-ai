@@ -28,11 +28,12 @@ import { Link as RouterLink } from 'react-router-dom';
 import { PageHeader } from '../../components/common/PageHeader';
 import { ScoreRing } from '../../components/common/ScoreRing';
 import { colors } from '../../theme/theme';
-import jdService, { SAMPLE_JDS } from '../../services/jdService';
+import jdService from '../../services/jdService';
 import resumeService from '../../services/resumeService';
 
 export const JDMatcherPage = () => {
   const [resumes, setResumes] = useState([]);
+  const [sampleJDs, setSampleJDs] = useState([]);
   const [selectedResumeId, setSelectedResumeId] = useState('');
   const [jdInput, setJdInput] = useState('');
   const [matchResult, setMatchResult] = useState(null);
@@ -42,14 +43,18 @@ export const JDMatcherPage = () => {
 
   useEffect(() => {
     let isMounted = true;
-    resumeService.getResumes().then((res) => {
+    Promise.all([resumeService.getResumes(), jdService.getSampleJDs()]).then(([res, samplesRes]) => {
       if (isMounted) {
-        setResumes(res.data);
-        const primary = res.data.find((r) => r.isPrimary) || res.data[0];
-        if (primary) setSelectedResumeId(primary.id);
-        // Pre-fill with Freshworks sample JD
-        setJdInput(SAMPLE_JDS[0].rawText);
-        setMatchResult(SAMPLE_JDS[0]);
+        const list = Array.isArray(res.data) ? res.data : (res.data?.resumes || []);
+        setResumes(list);
+        setSampleJDs(Array.isArray(samplesRes.data) ? samplesRes.data : []);
+        const primary = list.find((r) => r.isPrimary) || list[0];
+        if (primary) setSelectedResumeId(primary.id || primary._id);
+        setInitialLoading(false);
+      }
+    }).catch((error) => {
+      if (isMounted) {
+        setFeedback({ type: 'error', text: error.response?.data?.message || 'Could not load resumes and sample job descriptions.' });
         setInitialLoading(false);
       }
     });
@@ -67,17 +72,20 @@ export const JDMatcherPage = () => {
     if (!textToAnalyze.trim()) return;
     setLoading(true);
     setFeedback(null);
+    setMatchResult(null);
     try {
       const res = await jdService.matchJD(textToAnalyze, selectedResumeId);
       setMatchResult(res.data);
       setFeedback({
         type: 'success',
-        text: `Matched against ${res.data.company} — ${res.data.role}. Overall fit score: ${res.data.matchPercentage}%.`,
+        text: res.data.analysisProvider !== 'Local keyword fallback'
+          ? `${res.data.analysisProvider} compared ${res.data.analyzedSkillCount} role-relevant requirements with evidence from your resume. AI alignment estimate: ${res.data.matchPercentage}%.`
+          : `AI matching was unavailable, so a keyword-only fallback compared ${res.data.analyzedSkillCount} detected terms. This is not a semantic role-fit analysis.`,
       });
     } catch (err) {
       setFeedback({
         type: 'error',
-        text: 'Failed to process job description. Please ensure the text contains standard technical requirements.',
+        text: err.response?.data?.message || 'Could not compare this job description with the selected resume.',
       });
     } finally {
       setLoading(false);
@@ -98,8 +106,14 @@ export const JDMatcherPage = () => {
     <Box>
       <PageHeader
         title="Job Description (JD) Intelligence"
-        subtitle="Benchmark your resume against actual campus recruitment postings to identify must-have requirements before applying."
+        subtitle="Compare the requirements in a job description with evidence in one of your uploaded resumes."
       />
+
+      {!resumes.length && !initialLoading && (
+        <Alert severity="info" action={<Button component={RouterLink} to="/resumes" color="inherit" size="small">Manage resumes</Button>} sx={{ mb: 3 }}>
+          Upload a readable PDF or DOCX before analyzing a job description.
+        </Alert>
+      )}
 
       {feedback && (
         <Alert
@@ -124,7 +138,8 @@ export const JDMatcherPage = () => {
               fullWidth
               size="small"
               value={selectedResumeId}
-              onChange={(e) => setSelectedResumeId(e.target.value)}
+              onChange={(e) => { setSelectedResumeId(e.target.value); setMatchResult(null); }}
+              disabled={!resumes.length}
             >
               {resumes.map((r) => (
                 <MenuItem key={r.id} value={r.id}>
@@ -137,15 +152,16 @@ export const JDMatcherPage = () => {
           {/* Quick Pre-fill Samples */}
           <Grid item xs={12} sm={6}>
             <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.75, fontSize: '0.8125rem' }}>
-              Load Verified Campus Posting
+              Load Example Job Description
             </Typography>
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              {SAMPLE_JDS.map((sample) => (
+              {sampleJDs.map((sample) => (
                 <Button
                   key={sample.id}
                   variant="outlined"
                   size="small"
                   onClick={() => handleSelectSample(sample)}
+                  disabled={loading || !selectedResumeId}
                   sx={{
                     fontSize: '0.75rem',
                     py: 0.6,
@@ -172,7 +188,7 @@ export const JDMatcherPage = () => {
               fullWidth
               placeholder="Paste company job requirements, technical stack, eligibility criteria, or drive circular..."
               value={jdInput}
-              onChange={(e) => setJdInput(e.target.value)}
+              onChange={(e) => { setJdInput(e.target.value); setMatchResult(null); }}
             />
           </Grid>
 
@@ -181,7 +197,7 @@ export const JDMatcherPage = () => {
             <Button
               variant="contained"
               onClick={() => handleAnalyze()}
-              disabled={loading || !jdInput.trim()}
+              disabled={loading || !jdInput.trim() || !selectedResumeId}
               startIcon={<Sparkles size={15} />}
               sx={{ px: 3, py: 0.9, fontSize: '0.84375rem' }}
             >
@@ -193,6 +209,17 @@ export const JDMatcherPage = () => {
 
       {/* Analysis Output Results */}
       {matchResult && (
+        <>
+        {matchResult.analysisProvider !== 'Local keyword fallback' && (
+          <Alert severity="info" icon={<Sparkles size={18} />} sx={{ mb: 3, borderRadius: 1.5 }}>
+            <Typography variant="body2" sx={{ mb: matchResult.recommendation ? 0.75 : 0 }}>
+              {matchResult.overview}
+            </Typography>
+            {matchResult.recommendation && (
+              <Typography variant="body2"><strong>Suggested next step:</strong> {matchResult.recommendation}</Typography>
+            )}
+          </Alert>
+        )}
         <Grid container spacing={3}>
           {/* Left Column: Match Score & Drive Summary */}
           <Grid item xs={12} md={4}>
@@ -228,8 +255,22 @@ export const JDMatcherPage = () => {
                   max={100}
                   size={135}
                   strokeWidth={10}
-                  label="JD Match Fit"
-                  tooltip="Calculated by matching parsed hard technical skills, tools, and project evidence against mandatory JD qualifications."
+                  label={matchResult.analysisProvider !== 'Local keyword fallback' ? 'AI Role Alignment' : 'Keyword Coverage'}
+                  tooltip={matchResult.analysisProvider !== 'Local keyword fallback'
+                    ? `${matchResult.analysisProvider} estimates role alignment using the job requirements and resume evidence. It is guidance, not an ATS score or hiring prediction.`
+                    : 'Keyword-presence fallback only. It is not a semantic role-fit or hiring prediction.'}
+                />
+              </Box>
+
+              <Box sx={{ mb: 2, textAlign: 'center' }}>
+                <Chip
+                  size="small"
+                  icon={matchResult.analysisProvider !== 'Local keyword fallback' ? <Sparkles size={14} /> : undefined}
+                  label={matchResult.analysisProvider !== 'Local keyword fallback'
+                    ? `${matchResult.analysisProvider} AI${matchResult.analysisModel ? ` · ${matchResult.analysisModel}` : ''}`
+                    : 'Keyword fallback · AI unavailable'}
+                  color={matchResult.analysisProvider !== 'Local keyword fallback' ? 'primary' : 'warning'}
+                  variant="outlined"
                 />
               </Box>
 
@@ -238,10 +279,10 @@ export const JDMatcherPage = () => {
                   Eligibility & Dates:
                 </Typography>
                 <Typography variant="caption" sx={{ color: colors.ink, display: 'block', mb: 0.5 }}>
-                  <strong>CGPA Cutoff:</strong> {matchResult.eligibilityCgpa}
+                  <strong>CGPA Cutoff:</strong> {matchResult.eligibilityCgpa || 'Not listed'}
                 </Typography>
                 <Typography variant="caption" sx={{ color: colors.ink, display: 'block' }}>
-                  <strong>Drive Date:</strong> {matchResult.driveDate}
+                  <strong>Drive Date:</strong> {matchResult.driveDate || 'Not listed'}
                 </Typography>
               </Box>
 
@@ -265,10 +306,12 @@ export const JDMatcherPage = () => {
               <Box sx={{ mb: 3.5 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
                   <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '1.05rem', color: colors.ink }}>
-                    Must-Have Requirements (Screening Filters)
+                    {matchResult.analysisProvider !== 'Local keyword fallback' ? 'Required Skills & Evidence' : 'Technical Terms Found in Posting'}
                   </Typography>
                   <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                    Missing any of these risks automated resume rejection
+                    {matchResult.analysisProvider !== 'Local keyword fallback'
+                      ? `Evidence checked against ${matchResult.resumeFileName || 'the selected resume'}`
+                      : 'Keyword presence checked against the selected resume'}
                   </Typography>
                 </Box>
 
@@ -317,14 +360,15 @@ export const JDMatcherPage = () => {
               <Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
                   <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '1.05rem', color: colors.ink }}>
-                    Good-To-Have / Differentiator Skills
+                    {matchResult.analysisProvider !== 'Local keyword fallback' ? 'Preferred Skills & Evidence' : 'Good-To-Have / Differentiator Skills'}
                   </Typography>
                   <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                    Gives a competitive advantage during technical interviews
+                    {matchResult.analysisProvider !== 'Local keyword fallback' ? 'Items treated as preferred in the job description' : 'Only terms marked preferred or similar in the posting'}
                   </Typography>
                 </Box>
 
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+                  {!matchResult.requirements.goodToHave.length && <Typography variant="body2" sx={{ color: colors.inkSecondary }}>No optional technical terms were identified in this posting.</Typography>}
                   {matchResult.requirements.goodToHave.map((item, idx) => (
                     <Box
                       key={idx}
@@ -365,6 +409,7 @@ export const JDMatcherPage = () => {
             </Card>
           </Grid>
         </Grid>
+        </>
       )}
     </Box>
   );

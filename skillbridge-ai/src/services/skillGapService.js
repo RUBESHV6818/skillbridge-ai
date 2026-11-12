@@ -1,4 +1,4 @@
-import api, { USE_MOCK, mockDelay } from './api';
+import api from './api';
 
 export const MOCK_SKILL_GAP_DATA = {
   overallReadiness: 76,
@@ -104,12 +104,10 @@ export const MOCK_SKILL_GAP_DATA = {
 };
 
 export const skillGapService = {
-  getAnalysis: async () => {
-    if (USE_MOCK) {
-      return mockDelay(MOCK_SKILL_GAP_DATA, 280);
-    }
-    return api.get('/student/skill-gap');
-  },
+  getAnalysis: async (refresh = false) => api.get('/student/skill-gap', {
+    params: refresh ? { refresh: 'true' } : {},
+    timeout: 80000,
+  }),
 };
 
 export default skillGapService;

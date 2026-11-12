@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Card,
@@ -11,6 +11,7 @@ import {
   Avatar,
   FormControlLabel,
   Switch,
+  Skeleton,
 } from '@mui/material';
 import {
   User,
@@ -24,47 +25,86 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '../../components/common/PageHeader';
 import { useAuth } from '../../context/AuthContext';
+import authService from '../../services/authService';
 import { colors } from '../../theme/theme';
 
 export const ProfilePage = () => {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [formData, setFormData] = useState({
-    name: user?.name || 'Aarthi Raman',
-    email: user?.email || 'aarthi.raman@cit.edu.in',
-    phone: user?.phone || '+91 98401 22849',
-    department: user?.department || 'Computer Science and Engineering',
-    college: user?.college || 'Chennai Institute of Technology',
-    batchYear: user?.batchYear || 2025,
-    cgpa: user?.cgpa || 8.42,
-    targetRole: user?.targetRole || 'Full Stack Engineer',
-    linkedin: user?.linkedin || 'linkedin.com/in/aarthi-raman-dev',
-    github: user?.github || 'github.com/aarthiraman',
+    name: user?.name || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
+    department: user?.department || '',
+    college: user?.college || '',
+    batchYear: user?.batchYear ?? '',
+    cgpa: user?.cgpa ?? '',
+    targetRole: user?.targetRole || '',
+    targetRoleConfirmed: Boolean(user?.targetRoleConfirmed),
+    linkedin: user?.linkedin || '',
+    github: user?.github || '',
   });
 
-  const [notifications, setNotifications] = useState({
-    driveAlerts: true,
-    mentorComments: true,
-    weeklyRoadmapReminders: false,
+  const [notifications, setNotifications] = useState(user?.notificationPreferences || {
+    driveAlerts: true, mentorComments: true, weeklyRoadmapReminders: false,
   });
 
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleSave = (e) => {
+  useEffect(() => {
+    let active = true;
+    authService.getProfile().then(({ data }) => {
+      if (!active) return;
+      setFormData({
+        name: data.name || '', email: data.email || '', phone: data.phone || '',
+        department: data.department || '', college: data.college || '',
+        batchYear: data.batchYear ?? '', cgpa: data.cgpa ?? '',
+        targetRole: data.targetRole || '', targetRoleConfirmed: Boolean(data.targetRoleConfirmed),
+        linkedin: data.linkedin || '', github: data.github || '',
+      });
+      setNotifications(data.notificationPreferences || {
+        driveAlerts: true, mentorComments: true, weeklyRoadmapReminders: false,
+      });
+      updateUser(data);
+      setErrorMessage('');
+    }).catch((error) => {
+      if (active) setErrorMessage(error.response?.data?.message || 'Could not load your profile. Please refresh and try again.');
+    }).finally(() => {
+      if (active) setLoadingProfile(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
-    setTimeout(() => {
-      setSaving(false);
+    setErrorMessage('');
+    try {
+      const { data } = await authService.updateProfile({
+        ...formData,
+        batchYear: formData.batchYear === '' ? null : Number(formData.batchYear),
+        cgpa: formData.cgpa === '' ? null : Number(formData.cgpa),
+        notificationPreferences: notifications,
+      });
+      updateUser(data);
+      setFormData((current) => ({ ...current, ...data }));
+      setNotifications(data.notificationPreferences);
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
-    }, 400);
+    } catch (error) {
+      setErrorMessage(error.response?.data?.message || 'Could not save your profile. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <Box>
       <PageHeader
         title="Student Profile & Settings"
-        subtitle="Manage your academic credentials, campus placement target roles, and mentor contact preferences."
+        subtitle="Manage your profile details and saved notification preferences."
       />
 
       {savedSuccess && (
@@ -73,7 +113,11 @@ export const ProfilePage = () => {
         </Alert>
       )}
 
-      <form onSubmit={handleSave}>
+      {errorMessage && <Alert severity="error" sx={{ mb: 3, borderRadius: 1.5 }}>{errorMessage}</Alert>}
+
+      {loadingProfile && <Box sx={{ display: 'grid', gap: 2 }}><Skeleton variant="rounded" height={180} /><Skeleton variant="rounded" height={220} /></Box>}
+
+      {!loadingProfile && <form onSubmit={handleSave}>
         <Grid container spacing={3.5}>
           {/* Left Column: Personal & Academic Info */}
           <Grid item xs={12} md={8}>
@@ -90,14 +134,14 @@ export const ProfilePage = () => {
                     border: `1px solid ${colors.accentBorder}`,
                   }}
                 >
-                  {user?.avatar || 'AR'}
+                  {(formData.name || 'S').split(/\s+/).map((part) => part[0]).join('').toUpperCase().slice(0, 2)}
                 </Avatar>
                 <Box>
                   <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '1.2rem', color: colors.ink }}>
                     {formData.name}
                   </Typography>
                   <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                    Roll No: 211421104002 • Final Year B.Tech • CIT Chennai
+                    {formData.batchYear ? `Graduation year: ${formData.batchYear}` : 'Graduation year not set'}{formData.department ? ` • ${formData.department}` : ''}
                   </Typography>
                 </Box>
               </Box>
@@ -110,6 +154,8 @@ export const ProfilePage = () => {
                   <TextField
                     fullWidth
                     size="small"
+                    required
+                    inputProps={{ maxLength: 100 }}
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   />
@@ -134,6 +180,7 @@ export const ProfilePage = () => {
                   <TextField
                     fullWidth
                     size="small"
+                    inputProps={{ maxLength: 120 }}
                     value={formData.department}
                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                   />
@@ -146,6 +193,8 @@ export const ProfilePage = () => {
                   <TextField
                     fullWidth
                     size="small"
+                    type="number"
+                    inputProps={{ min: 1900, max: 2200, step: 1 }}
                     value={formData.batchYear}
                     onChange={(e) => setFormData({ ...formData, batchYear: e.target.value })}
                   />
@@ -158,6 +207,8 @@ export const ProfilePage = () => {
                   <TextField
                     fullWidth
                     size="small"
+                    type="number"
+                    inputProps={{ min: 0, max: 10, step: 0.01 }}
                     value={formData.cgpa}
                     onChange={(e) => setFormData({ ...formData, cgpa: e.target.value })}
                   />
@@ -171,7 +222,20 @@ export const ProfilePage = () => {
                     fullWidth
                     size="small"
                     value={formData.targetRole}
-                    onChange={(e) => setFormData({ ...formData, targetRole: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, targetRole: e.target.value, targetRoleConfirmed: false })}
+                  />
+                  <Typography variant="caption" sx={{ display: 'block', color: colors.inkSecondary, mt: 0.5 }}>
+                    Skill coverage is compared with this role. Leave it unconfirmed until you want a role-specific analysis.
+                  </Typography>
+                  <FormControlLabel
+                    control={(
+                      <Switch
+                        checked={Boolean(formData.targetRoleConfirmed)}
+                        disabled={!formData.targetRole.trim()}
+                        onChange={(event) => setFormData({ ...formData, targetRoleConfirmed: event.target.checked })}
+                      />
+                    )}
+                    label="Use this role for skill analysis"
                   />
                 </Grid>
 
@@ -221,7 +285,7 @@ export const ProfilePage = () => {
                 Notification Preferences
               </Typography>
               <Typography variant="caption" sx={{ color: colors.inkSecondary, display: 'block', mb: 2 }}>
-                Configure email alerts for campus recruitment milestones.
+                Placement and mentor alerts appear in Notifications. Weekly roadmap reminders are sent by email on Mondays at 9:00 AM India time.
               </Typography>
 
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -238,7 +302,7 @@ export const ProfilePage = () => {
                   }
                   label={
                     <Typography variant="body2" sx={{ fontSize: '0.8125rem' }}>
-                      Campus Drive & Slot Announcements
+                      Placement Tracker Updates
                     </Typography>
                   }
                 />
@@ -264,17 +328,15 @@ export const ProfilePage = () => {
                 <FormControlLabel
                   control={
                     <Switch
-                      checked={notifications.weeklyRoadmapReminders}
-                      onChange={(e) =>
-                        setNotifications({ ...notifications, weeklyRoadmapReminders: e.target.checked })
-                      }
+                      checked={Boolean(notifications.weeklyRoadmapReminders)}
+                      onChange={(e) => setNotifications({ ...notifications, weeklyRoadmapReminders: e.target.checked })}
                       size="small"
                       color="primary"
                     />
                   }
                   label={
                     <Typography variant="body2" sx={{ fontSize: '0.8125rem' }}>
-                      Weekly Roadmap Goal Reminders
+                      Weekly Roadmap Goal Reminders (Email)
                     </Typography>
                   }
                 />
@@ -283,21 +345,15 @@ export const ProfilePage = () => {
 
             <Card sx={{ p: 3, borderRadius: 2 }}>
               <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '1.05rem', color: colors.ink, mb: 1 }}>
-                Assigned Career Mentor
-              </Typography>
-              <Typography variant="body2" sx={{ fontWeight: 700, color: colors.ink }}>
-                Priya Sundaram
-              </Typography>
-              <Typography variant="caption" sx={{ color: colors.inkSecondary, display: 'block', mb: 1.5 }}>
-                Staff Frontend Engineer • Freshworks Inc.
+                Mentorship
               </Typography>
               <Typography variant="caption" sx={{ color: colors.inkSecondary, lineHeight: 1.5, display: 'block' }}>
-                CIT Alumni Mentor for final-year candidates targeting Product Tier-1 SDE roles.
+                A mentor has not been assigned to this account yet. Mentor assignments will appear here when enabled by your placement coordinator.
               </Typography>
             </Card>
           </Grid>
         </Grid>
-      </form>
+      </form>}
     </Box>
   );
 };

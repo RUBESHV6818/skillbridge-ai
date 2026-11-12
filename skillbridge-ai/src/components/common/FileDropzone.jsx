@@ -5,7 +5,7 @@ import { colors } from '../../theme/theme';
 
 export const FileDropzone = ({
   onFileUpload,
-  accept = '.pdf,.docx,.doc',
+  accept = '.pdf,.docx',
   maxSizeMB = 5,
   disabled = false,
 }) => {

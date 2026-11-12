@@ -6,6 +6,7 @@ import {
   Typography,
   Chip,
   Skeleton,
+  Alert,
 } from '@mui/material';
 import {
   TrendingUp,
@@ -35,12 +36,18 @@ import coordinatorService from '../../services/coordinatorService';
 export const PlacementAnalyticsPage = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
     coordinatorService.getAnalytics().then((res) => {
       if (isMounted) {
         setData(res.data);
+        setLoading(false);
+      }
+    }).catch((error) => {
+      if (isMounted) {
+        setLoadError(error.response?.data?.message || 'Could not load placement analytics. Please try again.');
         setLoading(false);
       }
     });
@@ -58,13 +65,15 @@ export const PlacementAnalyticsPage = () => {
     );
   }
 
+  if (loadError) return <Box><PageHeader title="Placement Drives & CTC Analytics" subtitle="Aggregates from application records saved by students." /><Alert severity="error">{loadError}</Alert></Box>;
+
   const PIE_COLORS = [colors.accent, colors.border];
 
   return (
     <Box>
       <PageHeader
         title="Placement Drives & CTC Analytics"
-        subtitle="Institutional placement metrics, recruiter conversion distribution, and salary packaging bands for CIT 2025."
+        subtitle="Aggregates from student-recorded applications and offers. These figures are not institutionally verified."
       />
 
       {/* Top 4 KPI Cards */}
@@ -74,38 +83,34 @@ export const PlacementAnalyticsPage = () => {
             title="Total Registered"
             value={data.totalRegistered}
             unit="students"
-            tooltip="Final year B.E./B.Tech students active in the 2025 placement cycle"
-            subtitle="CIT Chennai 2025 Batch"
+            tooltip="Verified student accounts recorded in SkillBridge."
+            subtitle="Current platform accounts"
             icon={Users}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
-            title="Placed Students"
+            title="Students with Tracked Offers"
             value={data.placedCount}
-            unit="offers"
-            tooltip="Students who have received one or more formal offer letters"
-            trend={12}
-            trendLabel="vs last year"
+            unit="students"
+            tooltip="Distinct student accounts with at least one application marked Offer Received."
             variant="highlight"
             icon={Award}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
-            title="Placement Rate"
+            title="Tracked Offer Rate"
             value={`${data.placementRate}%`}
-            tooltip="Percentage of eligible registered candidates placed to date"
-            trend={5}
-            trendLabel="target: 85%"
+            tooltip="Share of verified student accounts with an application marked Offer Received."
             icon={TrendingUp}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
-            title="Average CTC Package"
+            title="Average Recorded Package"
             value={data.averagePackage}
-            tooltip="Mean annual cost-to-company across all accepted campus offers"
+            tooltip="Mean package among offer entries with a package value in LPA."
             subtitle={`Highest: ${data.highestPackage}`}
             icon={Building2}
           />
@@ -120,10 +125,10 @@ export const PlacementAnalyticsPage = () => {
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Box>
                 <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '1.05rem', color: colors.ink }}>
-                  Offers Secured by Campus Recruiter
+                  Offers Recorded by Company
                 </Typography>
                 <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                  Top recruiters ranked by volume of formal offers issued
+                  Offer entries in the students’ placement trackers
                 </Typography>
               </Box>
             </Box>
@@ -157,14 +162,14 @@ export const PlacementAnalyticsPage = () => {
                 CTC Package Distribution Bands
               </Typography>
               <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-                Tier classification across total accepted offers
+                Package bands across offer entries with a recorded LPA value
               </Typography>
             </Box>
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 3 }}>
               {data.salaryBands.map((band, idx) => {
-                const total = data.placedCount;
-                const pct = Math.round((band.count / total) * 100);
+                const total = data.pricedOfferCount || 0;
+                const pct = total ? Math.round((band.count / total) * 100) : 0;
 
                 return (
                   <Box key={idx} sx={{ p: 1.5, borderRadius: 1.5, backgroundColor: colors.surfaceSubtle, border: `1px solid ${colors.borderLight}` }}>

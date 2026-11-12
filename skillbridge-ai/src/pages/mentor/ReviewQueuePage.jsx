@@ -35,14 +35,18 @@ export const ReviewQueuePage = () => {
     });
   }, []);
 
-  const handleApprove = async (reviewId) => {
-    const comment = activeComments[reviewId] || 'Approved by mentor. Well-quantified impact.';
+  const handleDecision = async (reviewId, status) => {
+    const comment = (activeComments[reviewId] || '').trim();
+    if (!comment) {
+      setToast({ type: 'warning', text: 'Add feedback before submitting your decision.' });
+      return;
+    }
     try {
-      await mentorService.approveReview(reviewId, comment);
+      await mentorService.respondToReview(reviewId, comment, status);
       setReviews((prev) =>
-        prev.map((r) => (r.id === reviewId ? { ...r, status: 'approved', mentorComment: comment } : r))
+        prev.map((r) => (r.id === reviewId ? { ...r, status, mentorComment: comment } : r))
       );
-      setToast({ type: 'success', text: 'Feedback dispatched to student dashboard.' });
+      setToast({ type: 'success', text: 'Your feedback was saved and the student was notified.' });
     } catch {
       setToast({ type: 'error', text: 'Failed to record approval.' });
     }
@@ -61,7 +65,7 @@ export const ReviewQueuePage = () => {
     <Box>
       <PageHeader
         title="Mentor Review Queue"
-        subtitle="Review student resume bullet revisions and mock interview responses awaiting industry sign-off."
+        subtitle="Review resume suggestions submitted by your assigned students."
       />
 
       {toast && (
@@ -104,7 +108,7 @@ export const ReviewQueuePage = () => {
               </Box>
 
               <Chip
-                label={rev.status === 'approved' ? 'Approved' : 'Pending Review'}
+                label={rev.status === 'approved' ? 'Approved' : rev.status === 'needs_changes' ? 'Changes requested' : 'Pending Review'}
                 size="small"
                 sx={{
                   backgroundColor: rev.status === 'approved' ? colors.successBg : colors.warningBg,
@@ -122,8 +126,10 @@ export const ReviewQueuePage = () => {
                 Student Submission for: {rev.targetCompany}
               </Typography>
               <Typography variant="body2" sx={{ color: colors.ink, lineHeight: 1.6, fontSize: '0.875rem' }}>
-                "{rev.content}"
+                <strong>Current wording:</strong> “{rev.before}”<br />
+                <strong>Suggested wording:</strong> “{rev.content}”
               </Typography>
+              {rev.rationale && <Typography variant="caption" sx={{ color: colors.inkSecondary, display: 'block', mt: 1 }}>Student context: {rev.rationale}</Typography>}
             </Box>
 
             {/* Mentor Action Bar */}
@@ -140,16 +146,17 @@ export const ReviewQueuePage = () => {
                 />
                 <Button
                   variant="contained"
-                  onClick={() => handleApprove(rev.id)}
+                  onClick={() => handleDecision(rev.id, 'approved')}
                   startIcon={<CheckCircle2 size={15} />}
                   sx={{ whiteSpace: 'nowrap', py: 0.8, fontSize: '0.8125rem' }}
                 >
                   Approve Bullet
                 </Button>
+                <Button variant="outlined" onClick={() => handleDecision(rev.id, 'needs_changes')} sx={{ whiteSpace: 'nowrap', py: 0.8, fontSize: '0.8125rem' }}>Request Changes</Button>
               </Box>
             ) : (
-              <Box sx={{ p: 1.5, borderRadius: 1.5, backgroundColor: colors.successBg, border: `1px solid ${colors.successBorder}` }}>
-                <Typography variant="caption" sx={{ color: colors.success, fontWeight: 700, display: 'block', mb: 0.25 }}>
+              <Box sx={{ p: 1.5, borderRadius: 1.5, backgroundColor: rev.status === 'approved' ? colors.successBg : colors.warningBg, border: `1px solid ${rev.status === 'approved' ? colors.successBorder : colors.warningBorder}` }}>
+                <Typography variant="caption" sx={{ color: rev.status === 'approved' ? colors.success : colors.warning, fontWeight: 700, display: 'block', mb: 0.25 }}>
                   Mentor Feedback Dispatched:
                 </Typography>
                 <Typography variant="body2" sx={{ color: colors.ink, fontSize: '0.8125rem' }}>
@@ -159,6 +166,7 @@ export const ReviewQueuePage = () => {
             )}
           </Card>
         ))}
+        {!reviews.length && <Alert severity="info">No review requests have been submitted by your assigned students.</Alert>}
       </Box>
     </Box>
   );
