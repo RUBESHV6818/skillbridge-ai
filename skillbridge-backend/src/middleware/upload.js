@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Ensure upload directory exists
-const uploadDir = path.join(__dirname, '../../uploads/resumes');
+const uploadDir = path.resolve(process.env.RESUME_STORAGE_DIR || path.join(__dirname, '../../uploads/resumes'));
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
@@ -22,11 +22,17 @@ const storage = multer.diskStorage({
 });
 
 function fileFilter(req, file, cb) {
-  const allowed = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-  if (allowed.includes(file.mimetype)) {
+  const extension = path.extname(file.originalname || '').toLowerCase();
+  const expectedTypes = {
+    '.pdf': 'application/pdf',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  };
+  if (expectedTypes[extension] === file.mimetype) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type. Only PDF and DOCX are allowed.'), false);
+    const error = new Error('Invalid file type. Upload a PDF or DOCX file with the matching file extension.');
+    error.status = 400;
+    cb(error, false);
   }
 }
 

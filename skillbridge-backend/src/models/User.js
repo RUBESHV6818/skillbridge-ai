@@ -30,6 +30,8 @@ const userSchema = new Schema({
   verified: { type: Boolean, default: false }, // email verification flag
   verificationToken: { type: String },
   verificationTokenExpires: { type: Date },
+  // Hashed proof that a verification token was already consumed successfully.
+  verificationTokenUsedHash: { type: String, select: false },
   passwordResetTokenHash: { type: String, select: false },
   passwordResetExpires: { type: Date, select: false },
 });

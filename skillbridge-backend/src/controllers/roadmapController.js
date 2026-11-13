@@ -1,4 +1,5 @@
 const Roadmap = require('../models/Roadmap');
+const ReadinessSnapshot = require('../models/ReadinessSnapshot');
 const Resume = require('../models/Resume');
 const { buildSkillGapData } = require('./skillGapController');
 
@@ -338,6 +339,20 @@ exports.toggleTask = async (req, res, next) => {
     });
     await roadmap.save();
     const summary = toResponse(roadmap);
+    try {
+      const snapshotDate = new Date().toISOString().slice(0, 10);
+      await ReadinessSnapshot.findOneAndUpdate(
+        { user: req.user._id, targetRole: roadmap.targetRole, snapshotDate },
+        {
+          $set: { roadmapProgress: summary.progressPercent },
+          $setOnInsert: { user: req.user._id, targetRole: roadmap.targetRole, snapshotDate },
+        },
+        { upsert: true, setDefaultsOnInsert: true },
+      );
+    } catch (snapshotError) {
+      // Progress persistence is primary; history logging must not block a task update.
+      console.warn('Could not save roadmap progress history:', snapshotError.message);
+    }
     res.json({
       success: true,
       taskId: task.id,

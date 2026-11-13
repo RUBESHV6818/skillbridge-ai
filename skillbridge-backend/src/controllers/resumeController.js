@@ -1,5 +1,6 @@
 // src/controllers/resumeController.js
 const fs = require('fs');
+const path = require('path');
 const mongoose = require('mongoose');
 const Resume = require('../models/Resume');
 const PlatformSettings = require('../models/PlatformSettings');
@@ -250,6 +251,33 @@ exports.getResumes = async (req, res, next) => {
   }
 };
 
+// @desc    Download a resume owned by the logged-in user
+// @route   GET /api/resumes/:id/file
+// @access  Private
+exports.downloadResume = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) return res.status(404).json({ message: 'Resume not found' });
+
+    const resume = await Resume.findOne({ _id: id, user: req.user._id }).select('filePath fileName');
+    if (!resume) return res.status(404).json({ message: 'Resume not found' });
+
+    const uploadRoot = path.resolve(__dirname, '../../uploads/resumes');
+    const filePath = path.resolve(resume.filePath);
+    if (!filePath.startsWith(`${uploadRoot}${path.sep}`)) {
+      return res.status(404).json({ message: 'Resume file not found' });
+    }
+    await fs.promises.access(filePath, fs.constants.R_OK);
+    const downloadName = path.basename(String(resume.fileName || 'resume').replace(/\\/g, '/'));
+    return res.download(filePath, downloadName);
+  } catch (err) {
+    if (err.code === 'ENOENT' || err.code === 'EACCES') {
+      return res.status(404).json({ message: 'Resume file not found' });
+    }
+    return next(err);
+  }
+};
+
 // @desc    Upload a new resume file
 // @route   POST /api/resumes/upload
 // @access  Private
@@ -275,7 +303,7 @@ exports.uploadResume = async (req, res, next) => {
     const extractedSkills = extractSkillsFromText(extractedText);
     const resume = new Resume({
       user: req.user._id,
-      fileName: file.originalname,
+      fileName: path.basename(String(file.originalname || 'resume').replace(/\\/g, '/')),
       fileSize: file.size,
       fileType: file.mimetype,
       filePath: file.path,
@@ -290,7 +318,12 @@ exports.uploadResume = async (req, res, next) => {
       extractedText: extractedText,
     });
 
-    await resume.save();
+    try {
+      await resume.save();
+    } catch (error) {
+      await fs.promises.unlink(file.path).catch(() => {});
+      throw error;
+    }
     await createNotification(req.user._id, {
       title: 'Resume uploaded and text extracted',
       message: `${resume.fileName} is uploaded and its text was extracted. Open Resume Intelligence for an AI review.`,
@@ -332,14 +365,14 @@ exports.deleteResume = async (req, res, next) => {
     if (!resume) {
       return res.status(404).json({ message: 'Resume not found' });
     }
-    if (fs.existsSync(resume.filePath)) {
-      try {
-        fs.unlinkSync(resume.filePath);
-      } catch (e) {
-        console.warn('Could not remove file on disk:', e.message);
-      }
-    }
     await Resume.deleteOne({ _id: resume._id });
+    const uploadRoot = path.resolve(__dirname, '../../uploads/resumes');
+    const filePath = path.resolve(resume.filePath);
+    if (filePath.startsWith(`${uploadRoot}${path.sep}`)) {
+      await fs.promises.unlink(filePath).catch((error) => {
+        if (error.code !== 'ENOENT') console.warn('Could not remove deleted resume file:', error.message);
+      });
+    }
     res.json({ success: true, deletedId: id });
   } catch (err) {
     next(err);

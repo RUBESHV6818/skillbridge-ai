@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { API_ORIGIN } from '../../../skillbridge-ai/src/services/apiBaseUrl';
 
 export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
@@ -19,9 +20,8 @@ export default function Login() {
     setIsError(false);
     setShowResend(false);
 
-    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001';
     try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
+      const res = await fetch(`${API_ORIGIN}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
@@ -48,9 +48,8 @@ export default function Login() {
   const handleResend = async () => {
     if (!form.email) return;
     setResending(true);
-    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001';
     try {
-      const res = await fetch(`${API_BASE}/api/auth/resend-verification`, {
+      const res = await fetch(`${API_ORIGIN}/api/auth/resend-verification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: form.email }),

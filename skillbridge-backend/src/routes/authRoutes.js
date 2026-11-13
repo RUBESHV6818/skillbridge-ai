@@ -154,11 +154,24 @@ router.post('/reset-password', async (req, res, next) => {
 router.get('/verify/:token', async (req, res, next) => {
   try {
     const { token } = req.params;
-    const user = await User.findOne({ verificationToken: token, verificationTokenExpires: { $gt: new Date() } });
+    const now = new Date();
+    const user = await User.findOne({ verificationToken: token, verificationTokenExpires: { $gt: now } });
     if (!user) {
+      // Email security scanners and React development mode can open a link more
+      // than once. Treat a recently consumed token as success, without keeping
+      // the original bearer token in the database.
+      const usedTokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      const alreadyVerified = await User.findOne({
+        verificationTokenUsedHash: usedTokenHash,
+        verified: true,
+      });
+      if (alreadyVerified) {
+        return res.json({ message: 'Email was already verified successfully', alreadyVerified: true });
+      }
       return res.status(400).json({ message: 'Invalid or expired verification token' });
     }
     user.verified = true;
+    user.verificationTokenUsedHash = crypto.createHash('sha256').update(token).digest('hex');
     user.verificationToken = undefined;
     user.verificationTokenExpires = undefined;
     await user.save();
@@ -180,6 +193,7 @@ router.post('/resend-verification', verificationEmailLimiter, async (req, res, n
       const verificationToken = crypto.randomBytes(32).toString('hex');
       user.verificationToken = verificationToken;
       user.verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      user.verificationTokenUsedHash = undefined;
       await user.save();
       await sendVerificationEmail(user.email, verificationToken);
     }
@@ -226,7 +240,7 @@ router.post('/demo-login', async (req, res, next) => {
     if (role === 'student' && !user.targetRoleConfirmed) user.targetRoleConfirmed = Boolean(user.targetRole);
     user.lastLoginAt = new Date();
     await user.save();
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: serializeUser(user) });
   } catch (err) { next(err); }
 });
@@ -250,7 +264,7 @@ router.post('/login', async (req, res, next) => {
     }
     user.lastLoginAt = new Date();
     await user.save();
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: serializeUser(user) });
   } catch (err) {
     next(err);

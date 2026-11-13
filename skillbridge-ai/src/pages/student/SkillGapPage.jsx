@@ -29,10 +29,11 @@ import { colors } from '../../theme/theme';
 import skillGapService from '../../services/skillGapService';
 import authService from '../../services/authService';
 import { useAuth } from '../../context/AuthContext';
+import { API_ORIGIN } from '../../services/apiBaseUrl';
 
 function analysisErrorMessage(error) {
   if (error.code === 'ECONNABORTED') return 'The AI analysis is taking longer than expected. Please wait a moment, then try again.';
-  if (!error.response) return 'Could not reach the backend at localhost:5001. Check that the backend is running.';
+  if (!error.response) return `Could not reach the backend at ${API_ORIGIN}. Check that the backend is running.`;
   if (error.response.data?.message) return error.response.data.message;
   return 'Could not load your AI role analysis. Please try again.';
 }

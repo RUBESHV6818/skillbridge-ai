@@ -3,6 +3,7 @@ const Application = require('../models/Application');
 const InterviewSession = require('../models/InterviewSession');
 const PlatformSettings = require('../models/PlatformSettings');
 const ReadinessSnapshot = require('../models/ReadinessSnapshot');
+const Roadmap = require('../models/Roadmap');
 
 const STATUS_LABELS = {
   wishlist: 'Wishlist', applied: 'Applied', oa: 'Online Assessment',
@@ -11,11 +12,12 @@ const STATUS_LABELS = {
 
 exports.getDashboard = async (req, res, next) => {
   try {
-    const [resumes, applications, interview, platformSettings] = await Promise.all([
+    const [resumes, applications, interview, platformSettings, roadmap] = await Promise.all([
       Resume.find({ user: req.user._id }).sort({ isPrimary: -1, uploadedAt: -1 }),
       Application.find({ user: req.user._id }).sort({ updatedAt: -1, createdAt: -1 }),
       InterviewSession.findOne({ user: req.user._id, completedAt: { $ne: null } }).sort({ completedAt: -1 }),
       PlatformSettings.findOne({ key: 'global' }).select('compositeWeights'),
+      Roadmap.findOne({ user: req.user._id }),
     ]);
     const primaryResume = resumes.find((resume) => resume.isPrimary) || resumes[0] || null;
     const targetRole = req.user.targetRoleConfirmed ? String(req.user.targetRole || '').trim() : '';
@@ -42,8 +44,14 @@ exports.getDashboard = async (req, res, next) => {
       ? Math.round(weighted.reduce((sum, [score, weight]) => sum + score * weight, 0) / weighted.reduce((sum, [, weight]) => sum + weight, 0))
       : null;
 
+    const roadmapTasks = roadmap?.weeks?.flatMap((week) => week.tasks || []) || [];
+    const completedRoadmapTasks = roadmapTasks.filter((task) => task.completed).length;
+    const roadmapProgress = roadmapTasks.length
+      ? Math.round((completedRoadmapTasks / roadmapTasks.length) * 100)
+      : null;
+
     let progressTimeline = [];
-    if (healthScore !== null) {
+    if (healthScore !== null || roadmapProgress !== null) {
       const today = new Date().toISOString().slice(0, 10);
       const cutoff = new Date();
       cutoff.setUTCDate(cutoff.getUTCDate() - 90);
@@ -56,6 +64,7 @@ exports.getDashboard = async (req, res, next) => {
               resumeScore: scores.resumeScore,
               interviewScore: scores.interviewScore,
               skillScore: scores.skillScore,
+              roadmapProgress,
             },
             $setOnInsert: { user: req.user._id, targetRole, snapshotDate: today },
           },
@@ -68,34 +77,45 @@ exports.getDashboard = async (req, res, next) => {
           snapshotDate: { $gte: cutoff.toISOString().slice(0, 10) },
         }).sort({ snapshotDate: -1 }).lean();
 
-        // Keep the latest saved snapshot in each week, then show the chart chronologically.
-        const latestByWeek = new Map();
-        snapshots.forEach((snapshot) => {
-          const date = new Date(`${snapshot.snapshotDate}T00:00:00.000Z`);
-          date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
-          const weekStart = date.toISOString().slice(0, 10);
-          if (!latestByWeek.has(weekStart)) {
-            latestByWeek.set(weekStart, {
-              week: date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
-              overall: snapshot.healthScore,
-              resume: snapshot.resumeScore,
-              interview: snapshot.interviewScore,
-            });
-          }
-        });
-        progressTimeline = [...latestByWeek.entries()]
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([, point]) => point);
+        // Keep one point per saved date so roadmap task changes become visible day by day.
+        progressTimeline = snapshots
+          .reverse()
+          .map((snapshot) => ({
+            date: new Date(`${snapshot.snapshotDate}T00:00:00.000Z`).toLocaleDateString('en-IN', {
+              month: 'short', day: 'numeric', timeZone: 'UTC',
+            }),
+            overall: snapshot.healthScore,
+            resume: snapshot.resumeScore,
+            interview: snapshot.interviewScore,
+            roadmap: snapshot.roadmapProgress,
+          }));
       } catch (snapshotError) {
         // A history-storage issue should not prevent the dashboard's current scores from loading.
         console.warn('Could not save or load dashboard readiness history:', snapshotError.message);
       }
     }
     const nextActions = [];
+    const nextRoadmapTask = roadmap?.weeks
+      ?.flatMap((week) => (week.tasks || []).map((task) => ({ week, task })))
+      .find(({ task }) => !task.completed);
     if (!primaryResume) nextActions.push({ id: 'upload-resume', title: 'Add a resume for review', description: 'Upload a PDF or DOCX so SkillBridge can analyze the extracted resume text.', category: 'Resume', priority: 'high', estTime: '5 mins', actionUrl: '/resumes', actionText: 'Upload resume' });
     else if (!resumeReviewMatchesRole || !resumeReview) nextActions.push({ id: 'review-resume', title: 'Generate an AI resume review', description: `Your primary resume is ${primaryResume.fileName}. Run its AI review to refresh your resume score.`, category: 'Resume', priority: 'high', estTime: '5 mins', actionUrl: '/resume-intelligence', actionText: 'Review resume' });
     if (!targetRole) nextActions.push({ id: 'set-target-role', title: 'Choose a target role', description: 'Save the role you want so role alignment and roadmap suggestions are relevant.', category: 'Profile', priority: 'high', estTime: '2 mins', actionUrl: '/profile', actionText: 'Set target role' });
     else if (primaryResume && !skillAnalysis) nextActions.push({ id: 'analyze-role', title: `Analyze your resume for ${targetRole}`, description: 'Create a role-specific AI skill-gap analysis for the dashboard.', category: 'Skill Gap', priority: 'high', estTime: '2 mins', actionUrl: '/skill-gap', actionText: 'Analyze role fit' });
+    else if (nextRoadmapTask) nextActions.push({
+      id: `roadmap-${nextRoadmapTask.task.id}`,
+      title: nextRoadmapTask.task.text,
+      description: `Next in Week ${nextRoadmapTask.week.weekNumber}: ${nextRoadmapTask.week.title}. Continue the saved plan for ${roadmap.targetRole || targetRole}.`,
+      category: 'Learning Roadmap', priority: 'medium',
+      estTime: nextRoadmapTask.task.duration || '30 mins',
+      actionUrl: '/learning-roadmap', actionText: 'Continue roadmap',
+    });
+    else if (roadmap && roadmapTasks.length) nextActions.push({
+      id: 'roadmap-complete', title: 'Review your completed learning roadmap',
+      description: 'All saved roadmap tasks are complete. Review your progress and refresh your role analysis when you have new evidence.',
+      category: 'Learning Roadmap', priority: 'medium', estTime: '5 mins',
+      actionUrl: '/learning-roadmap', actionText: 'Review roadmap',
+    });
     else if (skillAnalysis?.priorityActions?.length) nextActions.push({ id: 'close-skill-gap', title: skillAnalysis.priorityActions[0].title, description: skillAnalysis.priorityActions[0].reason || 'Work on the highest-priority gap in your role analysis.', category: 'Learning Roadmap', priority: 'medium', estTime: '30 mins', actionUrl: '/learning-roadmap', actionText: 'Open roadmap' });
     if (!interview) nextActions.push({ id: 'practice-interview', title: 'Try a written interview drill', description: 'Practice questions for your role and review your saved interview feedback.', category: 'Practice', priority: 'medium', estTime: '15 mins', actionUrl: '/mock-interview', actionText: 'Start a drill' });
     if (!applications.length) nextActions.push({ id: 'track-application', title: 'Track your first application', description: 'Keep application stages and notes together in your placement tracker.', category: 'Applications', priority: 'medium', estTime: '2 mins', actionUrl: '/placement-tracker', actionText: 'Open tracker' });
@@ -119,6 +139,9 @@ exports.getDashboard = async (req, res, next) => {
         offersCount: applications.filter((item) => item.status === 'offer').length,
       },
       progressTimeline,
+      roadmapProgress,
+      completedRoadmapTasks,
+      totalRoadmapTasks: roadmapTasks.length,
       nextActions,
       recentApplications: applications.slice(0, 5).map((item) => ({
         id: item._id.toString(), company: item.company, role: item.role,

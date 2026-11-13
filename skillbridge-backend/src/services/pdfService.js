@@ -1,6 +1,7 @@
 const fs = require('fs');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
+const { validateResumeFileBuffer } = require('./resumeFileValidation');
 
 async function extractTextFromFile(file) {
   if (!file) return '';
@@ -8,6 +9,7 @@ async function extractTextFromFile(file) {
 
   if (mimetype === 'application/pdf') {
     const data = await fs.promises.readFile(filePath);
+    validateResumeFileBuffer(data, file.originalname, mimetype);
     const parsed = await pdfParse(data);
     const text = (parsed.text || '').trim();
     if (!text) {
@@ -17,6 +19,8 @@ async function extractTextFromFile(file) {
   }
 
   if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    const data = await fs.promises.readFile(filePath);
+    validateResumeFileBuffer(data, file.originalname, mimetype);
     const result = await mammoth.extractRawText({ path: filePath });
     const text = (result.value || '').trim();
     if (!text) throw new Error('No readable text was found in this DOCX file.');

@@ -339,21 +339,25 @@ export const CareerDashboardPage = () => {
               Readiness History
             </Typography>
             <Typography variant="caption" sx={{ color: colors.inkSecondary }}>
-              Weekly trend from your saved scores for {data.targetRole || 'your current profile'}; opening the dashboard saves today’s snapshot.
+              Daily readiness and roadmap progress snapshots for {data.targetRole || 'your current profile'}. Completing a roadmap task saves today’s progress.
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.75, sm: 1 }, flexWrap: 'wrap', width: { xs: '100%', sm: 'auto' }, justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: colors.accent }} />
               <Typography variant="caption" sx={{ color: colors.inkSecondary }}>Overall</Typography>
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: colors.success }} />
               <Typography variant="caption" sx={{ color: colors.inkSecondary }}>AI Resume Review</Typography>
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: colors.warning }} />
               <Typography variant="caption" sx={{ color: colors.inkSecondary }}>Mock Interview</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#7c5ce7' }} />
+              <Typography variant="caption" sx={{ color: colors.inkSecondary }}>Roadmap Progress</Typography>
             </Box>
           </Box>
         </Box>
@@ -366,10 +370,11 @@ export const CareerDashboardPage = () => {
             >
               <CartesianGrid strokeDasharray="3 3" stroke={colors.borderLight} vertical={false} />
               <XAxis
-                dataKey="week"
+                dataKey="date"
                 stroke={colors.inkTertiary}
                 fontSize={12}
                 tickLine={false}
+                minTickGap={28}
               />
               <YAxis
                 domain={[0, 100]}
@@ -410,6 +415,15 @@ export const CareerDashboardPage = () => {
                 stroke={colors.warning}
                 strokeWidth={1.8}
                 dot={{ r: 3, fill: colors.warning }}
+              />
+              <Line
+                type="monotone"
+                dataKey="roadmap"
+                name="Roadmap Progress"
+                stroke="#7c5ce7"
+                strokeWidth={2}
+                connectNulls
+                dot={{ r: 3, fill: '#7c5ce7' }}
               />
             </LineChart>
           </ResponsiveContainer> : <Box sx={{ height: '100%', display: 'grid', placeItems: 'center', color: colors.inkSecondary }}>

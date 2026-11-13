@@ -395,18 +395,20 @@ export const ResumeIntelligencePage = () => {
               </Box>
             </Box>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Box sx={{ p: 2, borderRadius: 1.5, backgroundColor: colors.surfaceSubtle, border: `1px solid ${colors.borderLight}`, height: '100%' }}>
-              <Typography variant="caption" sx={{ fontWeight: 700, color: colors.inkSecondary, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block', mb: 1.25 }}>
-                Mechanical Engineering
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                {(data.extractedSkills.engineering || []).map((sk) => (
-                  <SkillChip key={sk} name={sk} status="matched" />
-                ))}
+          {data.extractedSkills.engineering?.length > 0 && (
+            <Grid item xs={12} sm={6} md={3}>
+              <Box sx={{ p: 2, borderRadius: 1.5, backgroundColor: colors.surfaceSubtle, border: `1px solid ${colors.borderLight}`, height: '100%' }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: colors.inkSecondary, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block', mb: 1.25 }}>
+                  Engineering Skills
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                  {data.extractedSkills.engineering.map((sk) => (
+                    <SkillChip key={sk} name={sk} status="matched" />
+                  ))}
+                </Box>
               </Box>
-            </Box>
-          </Grid>
+            </Grid>
+          )}
         </Grid>
       </Card>
 

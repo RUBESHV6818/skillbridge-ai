@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { API_ORIGIN } from '../../../skillbridge-ai/src/services/apiBaseUrl';
 
 export default function Register() {
   const [form, setForm] = useState({ name: '', email: '', password: '' });
@@ -18,9 +19,8 @@ export default function Register() {
     setIsError(false);
     setLoading(true);
 
-    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001';
     try {
-      const res = await fetch(`${API_BASE}/api/auth/register`, {
+      const res = await fetch(`${API_ORIGIN}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, role: 'student' }),

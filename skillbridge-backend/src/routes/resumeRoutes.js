@@ -3,6 +3,7 @@ const express = require('express');
 const { resumeUpload } = require('../middleware/upload');
 const {
   getResumes,
+  downloadResume,
   uploadResume,
   setPrimaryResume,
   deleteResume,
@@ -13,6 +14,9 @@ const router = express.Router();
 
 // GET /api/resumes - list user's resumes
 router.get('/', getResumes);
+
+// GET /api/resumes/:id/file - download only a resume owned by the current user
+router.get('/:id/file', downloadResume);
 
 // POST /api/resumes/upload - upload a resume file
 router.post('/upload', resumeUpload.single('resume'), uploadResume);

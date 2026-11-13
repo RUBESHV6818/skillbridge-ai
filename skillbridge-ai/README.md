@@ -1,16 +1,7 @@
-# React + Vite
+# Shared SkillBridge frontend source
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+The active web application is started from `../skillbridge-frontend`. Its Vite entry point imports the React application from this folder so the existing screens and routes remain shared.
 
-Currently, two official plugins are available:
+The `server/` directory in this folder is an older authentication prototype. The active API is `../skillbridge-backend`; do not start the prototype server when running the main SkillBridge application.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+For installation, environment variables, and startup instructions, see the repository [README](../README.md).

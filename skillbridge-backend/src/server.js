@@ -4,7 +4,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const mongoose = require('mongoose');
-const path = require('path');
+const { getAIConfig } = require('./services/aiProvider');
+const { getEmailDeliveryStatus } = require('./services/emailService');
 
 const { errorHandler, notFound } = require('./middleware/error');
 const { authenticate } = require('./middleware/authenticate');
@@ -27,16 +28,49 @@ const adminRoutes = require('./routes/adminRoutes');
 const mentorRoutes = require('./routes/mentorRoutes');
 
 const app = express();
-// Root route (health check)
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+  throw new Error('JWT_SECRET must be configured with at least 32 characters before the backend can start.');
+}
+if (process.env.NODE_ENV === 'production' && !process.env.CORS_ORIGINS) {
+  throw new Error('CORS_ORIGINS must list the deployed frontend origin in production.');
+}
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI must point to the production database.');
+  if (!process.env.RESUME_STORAGE_DIR) throw new Error('RESUME_STORAGE_DIR must point to persistent private storage.');
+  if (!process.env.APP_BASE_URL || !process.env.APP_BASE_URL.startsWith('https://')) {
+    throw new Error('APP_BASE_URL must be the HTTPS address of the deployed frontend.');
+  }
+  if (!getAIConfig().configured) throw new Error('Configure the selected AI provider key before starting in production.');
+  if (getEmailDeliveryStatus().mode !== 'smtp') throw new Error('Configure working SMTP settings before starting in production.');
+  if (!process.env.PISTON_API_URL) throw new Error('PISTON_API_URL must point to the approved code runner in production.');
+
+  for (const origin of allowedOrigins) {
+    let parsedOrigin;
+    try { parsedOrigin = new URL(origin); } catch { throw new Error('CORS_ORIGINS must contain valid origin URLs.'); }
+    if (parsedOrigin.protocol !== 'https:' || parsedOrigin.origin !== origin) {
+      throw new Error('Production CORS_ORIGINS must contain HTTPS origins without paths or trailing slashes.');
+    }
+  }
+}
+
 const rootRoutes = require('./routes/root');
-app.use('/', rootRoutes);
 
 // Global middlewares
-app.use(cors());
+app.use(cors({
+  origin(origin, callback) {
+    // Requests without an Origin header are typically server-to-server or local health checks.
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(null, false);
+  },
+}));
 app.use(helmet());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Rate limiting (basic)
 const limiter = rateLimit({
@@ -44,6 +78,9 @@ const limiter = rateLimit({
   max: 100,
 });
 app.use(limiter);
+
+// Public liveness/readiness checks for local monitoring and hosting probes.
+app.use('/', rootRoutes);
 
 // DB connection
 const mongoUri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/skillbridge_ai';

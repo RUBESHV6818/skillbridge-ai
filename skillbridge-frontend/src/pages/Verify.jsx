@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import { API_ORIGIN } from '../../../skillbridge-ai/src/services/apiBaseUrl';
 
 export default function Verify() {
   const [searchParams] = useSearchParams();
@@ -12,8 +13,7 @@ export default function Verify() {
       setStatus("❌ No token supplied");
       return;
     }
-    const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5001";
-    fetch(`${API_BASE}/api/auth/verify/${token}`)
+    fetch(`${API_ORIGIN}/api/auth/verify/${token}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.message?.includes("successfully")) {

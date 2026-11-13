@@ -12,7 +12,7 @@ import {
   IconButton,
   Grid,
 } from '@mui/material';
-import { Eye, EyeOff, GraduationCap, Check, X } from 'lucide-react';
+import { Eye, EyeOff, GraduationCap, Check, X, ArrowRight, CheckCircle2, Sparkles } from 'lucide-react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../theme/theme';
@@ -122,18 +122,59 @@ export const RegisterPage = () => {
     <Box
       sx={{
         minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: colors.bg,
-        px: 2,
-        py: 6,
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', md: 'minmax(320px, .88fr) minmax(560px, 1.12fr)' },
+        background: 'linear-gradient(135deg, #f8f7fc 0%, #f1eff8 100%)',
+        '@keyframes registerRise': {
+          from: { opacity: 0, transform: 'translateY(18px)' },
+          to: { opacity: 1, transform: 'translateY(0)' },
+        },
+        '@keyframes registerGlow': {
+          '0%, 100%': { transform: 'translate3d(0, 0, 0)' },
+          '50%': { transform: 'translate3d(0, -12px, 0)' },
+        },
+        '@media (prefers-reduced-motion: reduce)': {
+          '& *, & *::before, & *::after': { animationDuration: '0.01ms !important', animationIterationCount: '1 !important' },
+        },
       }}
     >
-      <Box sx={{ width: '100%', maxWidth: 540 }}>
+      <Box
+        sx={{
+          position: 'relative', display: { xs: 'none', md: 'flex' }, minHeight: '100vh', overflow: 'hidden',
+          alignItems: 'flex-end', p: { md: 4, lg: 6 }, color: '#fff',
+          background: 'linear-gradient(145deg, #40358b 0%, #25204e 100%)',
+          '&::before': { content: '""', position: 'absolute', zIndex: 1, width: 340, height: 340, borderRadius: '50%', top: '8%', right: '-14%', background: 'rgba(180,166,255,.18)', filter: 'blur(4px)', animation: 'registerGlow 8s ease-in-out infinite' },
+          '&::after': { content: '""', position: 'absolute', zIndex: 1, inset: 0, background: 'linear-gradient(180deg, rgba(25,22,58,.03) 0%, rgba(25,22,58,.2) 35%, rgba(25,22,58,.93) 100%)' },
+        }}
+      >
+        <Box component="svg" viewBox="0 0 1000 1100" preserveAspectRatio="xMidYMid slice" aria-hidden="true" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: .9, zIndex: 0 }}>
+          <defs>
+            <linearGradient id="register-sky" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#8177d6"/><stop offset="1" stopColor="#37306e"/></linearGradient>
+            <linearGradient id="register-building" x1="0" y1="0" x2=".9" y2="1"><stop stopColor="#f3edff"/><stop offset="1" stopColor="#a9a2d7"/></linearGradient>
+            <linearGradient id="register-ground" x1="0" y1="0" x2="1" y2="0"><stop stopColor="#776cae"/><stop offset="1" stopColor="#342d68"/></linearGradient>
+          </defs>
+          <rect width="1000" height="1100" fill="url(#register-sky)"/><circle cx="770" cy="235" r="126" fill="#fff4cf" opacity=".48"/><circle cx="770" cy="235" r="178" fill="#fff4cf" opacity=".11"/>
+          <path d="M0 555Q210 460 390 570T760 540T1100 570V1100H0Z" fill="#615897" opacity=".5"/><path d="M98 860V422L500 245 902 422V860Z" fill="url(#register-building)" opacity=".92"/><path d="m58 432 442-206 442 206-23 28-419-181-419 181Z" fill="#fff8e8"/>
+          <rect x="137" y="454" width="726" height="22" fill="#8178b5" opacity=".65"/>{[0,1,2,3,4].map((i)=><g key={i}><rect x={171+i*139} y="496" width="47" height="318" rx="20" fill="#fffaf0" opacity=".9"/><rect x={181+i*139} y="516" width="27" height="270" rx="12" fill="#8178bd" opacity=".56"/></g>)}
+          <rect x="120" y="816" width="760" height="26" fill="#f8f0dd"/><path d="M0 842H1000V1100H0Z" fill="url(#register-ground)"/><path d="M370 1100 453 842H547L630 1100Z" fill="#d7d1f1" opacity=".4"/><path d="M112 883H888M185 930H815M260 980H740" stroke="#f5f0ff" strokeWidth="5" opacity=".24"/>
+          {[105,870].map((x)=><g key={x} opacity=".82"><path d={`M${x} 837v-96`} stroke="#242044" strokeWidth="9"/><circle cx={x} cy="718" r="41" fill="#a9c6bf"/><circle cx={x-22} cy="740" r="31" fill="#80a99e"/><circle cx={x+24} cy="743" r="30" fill="#739b91"/></g>)}
+          <g opacity=".8"><circle cx="334" cy="857" r="14" fill="#f6c7a5"/><path d="M316 876q18-17 36 0v42h-36Z" fill="#e6b775"/><path d="m322 917-9 28m25-28 10 28" stroke="#28234f" strokeWidth="8" strokeLinecap="round"/></g>
+          <g opacity=".78"><circle cx="688" cy="862" r="14" fill="#efc2a5"/><path d="M670 881q18-17 36 0v42h-36Z" fill="#bcb7ef"/><path d="m676 922-9 28m25-28 10 28" stroke="#28234f" strokeWidth="8" strokeLinecap="round"/></g>
+          <g fill="#fff" opacity=".58"><circle cx="130" cy="180" r="4"/><circle cx="259" cy="293" r="3"/><circle cx="911" cy="344" r="4"/><circle cx="630" cy="155" r="3"/></g>
+        </Box>
+        <Box sx={{ position: 'relative', zIndex: 2, maxWidth: 560, animation: 'registerRise .8s ease-out both' }}>
+          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, mb: 2.5, px: 1.5, py: .8, borderRadius: 99, background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.22)', backdropFilter: 'blur(10px)' }}><Sparkles size={16}/><Typography variant="caption" sx={{ color: 'inherit', fontWeight: 600, letterSpacing: '.04em' }}>A MORE PERSONAL WAY TO PREPARE</Typography></Box>
+          <Typography sx={{ color: '#fff', fontFamily: "'Playfair Display', Georgia, serif", fontSize: { md: '2.65rem', lg: '3.35rem' }, lineHeight: 1.08, fontWeight: 700, letterSpacing: '-.035em', mb: 2 }}>Create your profile. Make your next move count.</Typography>
+          <Typography sx={{ color: 'rgba(255,255,255,.82)', fontSize: '1rem', lineHeight: 1.75, maxWidth: 470, mb: 3 }}>A few details help SkillBridge shape resume insights, skill plans, and interview practice around your goals.</Typography>
+          <Box sx={{ display: 'grid', gap: 1.3 }}>{['Set the role you want to work toward', 'See strengths and skills to build', 'Practice for real placement rounds'].map((item)=><Box key={item} sx={{ display: 'flex', alignItems: 'center', gap: 1.1, color: 'rgba(255,255,255,.92)' }}><CheckCircle2 size={17}/><Typography variant="body2" sx={{ color: 'inherit' }}>{item}</Typography></Box>)}</Box>
+          <Typography variant="caption" sx={{ display: 'block', mt: 5, color: 'rgba(255,255,255,.62)' }}>A clearer start for the career you’re building.</Typography>
+        </Box>
+      </Box>
+
+      <Box sx={{ width: '100%', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', px: { xs: 2, sm: 4, lg: 5 }, py: { xs: 4, sm: 5 }, overflowY: 'auto' }}>
+      <Box sx={{ width: '100%', maxWidth: 680, animation: 'registerRise .65s .08s ease-out both' }}>
         {/* Header */}
-        <Box sx={{ mb: 3.5, textAlign: 'left' }}>
+        <Box sx={{ mb: 3, textAlign: 'left' }}>
           <Box
             component={RouterLink}
             to="/"
@@ -143,7 +184,7 @@ export const RegisterPage = () => {
               gap: 1.5,
               textDecoration: 'none',
               color: 'inherit',
-              mb: 2,
+              mb: 2.5,
             }}
           >
             <Box
@@ -176,22 +217,23 @@ export const RegisterPage = () => {
           <Typography
             variant="h2"
             sx={{
-              fontSize: '1.75rem',
+              fontSize: { xs: '2rem', sm: '2.2rem' },
               fontWeight: 700,
               color: colors.ink,
-              mb: 0.75,
-              letterSpacing: '-0.02em',
+              mb: 0.9,
+              letterSpacing: '-0.035em',
+              lineHeight: 1.15,
             }}
           >
-            Create student or staff profile
+            Create your SkillBridge account
           </Typography>
-          <Typography variant="body2" sx={{ color: colors.inkSecondary }}>
-            Set up your placement profile to unlock evidence-based AI resume reviews, skill roadmaps, and campus drive tracking.
+          <Typography variant="body1" sx={{ color: colors.inkSecondary, lineHeight: 1.65 }}>
+            Set up your profile for resume insights, role-focused skill plans, and interview practice.
           </Typography>
         </Box>
 
         {/* Card */}
-        <Card sx={{ p: { xs: 2.5, sm: 3.5 }, borderRadius: 2 }}>
+        <Card sx={{ p: { xs: 2.5, sm: 3.5 }, borderRadius: 3, border: '1px solid rgba(78, 65, 171, .10)', boxShadow: '0 24px 70px rgba(43, 35, 100, .10)', background: 'rgba(255,255,255,.96)' }}>
           {formError && (
             <Alert severity="error" sx={{ mb: 2.5, fontSize: '0.8125rem' }}>
               {formError}
@@ -433,6 +475,7 @@ export const RegisterPage = () => {
             </Link>
           </Typography>
         </Box>
+      </Box>
       </Box>
     </Box>
   );

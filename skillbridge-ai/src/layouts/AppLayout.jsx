@@ -441,7 +441,7 @@ export const AppLayout = () => {
             zIndex: (theme) => theme.zIndex.drawer - 1,
           }}
         >
-          <Toolbar sx={{ minHeight: '56px !important', px: { xs: 2, md: 3 }, gap: 2 }}>
+          <Toolbar sx={{ minHeight: '56px !important', px: { xs: 1, sm: 2, md: 3 }, gap: { xs: 0.75, sm: 2 }, minWidth: 0 }}>
             <IconButton
               edge="start"
               color="inherit"
@@ -460,6 +460,11 @@ export const AppLayout = () => {
                 fontSize: '0.9375rem',
                 color: colors.ink,
                 letterSpacing: '-0.01em',
+                minWidth: 0,
+                flexShrink: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
               }}
             >
               {getPageTitle()}
@@ -620,7 +625,7 @@ export const AppLayout = () => {
             maxWidth: 1240,
             width: '100%',
             mx: 'auto',
-            pb: 10, // Generous padding for bottom role switcher
+            pb: { xs: 13, sm: 10 }, // Keep content clear of the fixed role switcher.
           }}
         >
           <Outlet />
@@ -630,18 +635,23 @@ export const AppLayout = () => {
         <Box
           sx={{
             position: 'fixed',
-            bottom: 12,
-            right: 16,
+            bottom: { xs: 8, sm: 12 },
+            right: { xs: 8, sm: 16 },
+            left: { xs: 8, sm: 'auto' },
+            maxWidth: { xs: 'calc(100vw - 16px)', sm: 'none' },
+            boxSizing: 'border-box',
             zIndex: 1300,
             backgroundColor: 'rgba(23, 22, 28, 0.94)',
             backdropFilter: 'blur(8px)',
             color: '#FFFFFF',
-            px: 2,
-            py: 0.85,
+            px: { xs: 1, sm: 2 },
+            py: { xs: 0.75, sm: 0.85 },
             borderRadius: 2,
             display: 'flex',
             alignItems: 'center',
-            gap: 1.5,
+            gap: { xs: 0.5, sm: 1.5 },
+            justifyContent: { xs: 'center', sm: 'flex-start' },
+            flexWrap: { xs: 'wrap', sm: 'nowrap' },
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
             border: '1px solid rgba(255, 255, 255, 0.12)',
           }}
@@ -649,6 +659,7 @@ export const AppLayout = () => {
           <Typography
             variant="caption"
             sx={{
+              display: { xs: 'none', sm: 'block' },
               color: '#A19EB0',
               fontWeight: 600,
               fontSize: '0.6875rem',
@@ -683,10 +694,11 @@ export const AppLayout = () => {
                 }}
                 sx={{
                   cursor: 'pointer',
-                  px: 1.25,
-                  py: 0.35,
+                  px: { xs: 0.85, sm: 1.25 },
+                  py: { xs: 0.45, sm: 0.35 },
                   borderRadius: 1,
-                  fontSize: '0.75rem',
+                  fontSize: { xs: '0.6875rem', sm: '0.75rem' },
+                  whiteSpace: 'nowrap',
                   fontWeight: isCurrent ? 600 : 400,
                   backgroundColor: isCurrent ? colors.accent : 'rgba(255, 255, 255, 0.08)',
                   color: isCurrent ? '#FFFFFF' : '#D1CFDF',
